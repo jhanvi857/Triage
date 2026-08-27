@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  html, body {
+    background-color: #F5F6F6 !important;
+    color: #202525 !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Dispatch Signage & Control Typography */
+.font-dispatch {
+  font-family: 'Barlow Condensed', 'Oswald', sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.font-mono-plex {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+}
+
+/* Restrained Table & Column Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #F5F6F6;
+}
+::-webkit-scrollbar-thumb {
+  background: #E2E5E5;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6F7777;
+}
+
