@@ -49,7 +49,7 @@ export const ControlRoomHeader: React.FC<ControlRoomHeaderProps> = ({
               </div>
             </div>
             <p className="text-[11px] text-zinc-400 tracking-tight">
-              Authorization &amp; spend-gating layer for autonomous AI buyer agents on Razorpay
+              Autonomous payment triage, recovery &amp; spend-gating layer on Razorpay
             </p>
           </div>
         </div>

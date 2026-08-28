@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
-import { Sparkles, TrendingUp, BarChart3, Play, CheckCircle2, Layers, ShieldCheck } from "lucide-react";
+import { Sparkles, TrendingUp, BarChart3, ShieldCheck, Database, Layers, CheckCircle2 } from "lucide-react";
 import { PerformanceChart } from "./PerformanceChart";
+import { RevenueAtRiskBreakdown } from "./RevenueAtRiskBreakdown";
 import { SummaryStats } from "../lib/types";
 
 interface AnalyticsUpliftViewProps {
@@ -17,82 +18,53 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
   isBatchRunning,
 }) => {
   return (
-    <div className="space-y-4 font-sans">
-      {/* 1. Header with Batch Runner CTA */}
-      <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#087F83] bg-[#087F83]/10 px-2 py-0.5 rounded border border-[#087F83]/20">
-              TRACK 03 MODEL BENCHMARK
-            </span>
+    <div className="space-y-5 font-sans">
+      {/* ALWAYS-VISIBLE HONESTY BANNER (Teal Green & White) */}
+      <div className="bg-[#0C3B3C] border-2 border-[#165B5D] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-white shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-lg bg-[#087F83]/30 border border-[#4DB6AC]/40 text-[#80CBC4] flex items-center justify-center shrink-0">
+            <Database className="w-5 h-5" />
           </div>
-          <h1 className="text-[24px] font-semibold text-[#202525] mt-1 leading-tight">
-            Machine Learning Efficacy &amp; Revenue Uplift Analytics
-          </h1>
-          <p className="text-[12px] font-normal text-[#6F7777] mt-0.5">
-            Empirical comparative analysis: <strong>Static Dunning Baseline</strong> vs <strong>Random Forest Expected Value Policy</strong>.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[13px] tracking-wider uppercase text-[#E0F2F1]">
+                SYNTHETIC DATA ENVIRONMENT
+              </span>
+              <span className="text-[10px] font-mono font-bold bg-[#087F83] text-white px-2 py-0.5 rounded border border-[#4DB6AC]/30">
+                EVALUATION BENCHMARK
+              </span>
+            </div>
+            <p className="text-[12px] text-[#B2DFDB] mt-0.5 leading-snug">
+              Generated exclusively for offline ML model verification, hyperparameter ranking, and static-vs-ML uplift comparison.
+              <strong className="text-white"> Not derived from live merchant transactions.</strong>
+            </p>
+          </div>
         </div>
 
         <button
           onClick={onOpenBatchModal}
           disabled={isBatchRunning}
-          className="flex items-center space-x-2 px-4 py-2 rounded bg-[#087F83] hover:bg-[#06686B] text-white text-[12px] font-medium tracking-wide transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+          className="flex items-center space-x-2 px-4 py-2.5 rounded-lg bg-[#087F83] hover:bg-[#06686B] text-white text-[12px] font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-50 shrink-0 border border-[#80CBC4]/30"
         >
           <BarChart3 className="w-4 h-4" />
-          <span>{isBatchRunning ? "Simulating..." : "Launch Comparative Benchmark (50 Cases)"}</span>
+          <span>{isBatchRunning ? "Simulating..." : "Run Batch Benchmark (50 Cases)"}</span>
         </button>
       </div>
 
-      {/* Methodology & Rigor Disclosure Callout */}
-      <div className="p-4 rounded-lg bg-[#FFFFFF] border border-[#E2E5E5] space-y-3 font-sans">
-        <div className="flex items-center justify-between border-b border-[#E2E5E5] pb-2">
-          <div className="flex items-center space-x-2 text-[#087F83] font-semibold uppercase tracking-wide text-[12px]">
-            <ShieldCheck className="w-4 h-4 text-[#087F83]" />
-            <span>Evaluation Methodology &amp; Mathematical Formulation</span>
-          </div>
-          <span className="text-[11px] font-mono font-semibold bg-[#F5F6F6] text-[#6F7777] px-2 py-0.5 rounded border border-[#E2E5E5]">
-            3-Tier Evidence Hierarchy
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
-          <div className="space-y-1.5">
-            <span className="font-semibold text-[13px] text-[#202525] block">
-              What does 1 training row represent?
+      {/* 1. Header with Model Architecture Info */}
+      <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center space-x-2">
+            <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#087F83] bg-[#E6F4F1] px-2 py-0.5 rounded border border-[#B2DFDB]">
+              SYNTHETIC MODEL EVALUATION HARNESS
             </span>
-            <p className="text-[13px] font-normal text-[#6F7777] leading-relaxed">
-              The model does not make ungrounded predictions of human psychology. It estimates:
-            </p>
-            <div className="p-2.5 rounded bg-[#F5F6F6] border border-[#E2E5E5] font-mono text-[11px] text-[#202525] space-y-0.5">
-              <div className="text-[#6F7777]">// Training Input Features:</div>
-              <div>(cause, rail, attempt, amount, hist_rate, payday_days, candidate_action)</div>
-              <div className="text-[#087F83] font-semibold">&darr; Target: P(recovery_success = 1)</div>
-            </div>
-            <p className="text-[12px] font-normal text-[#6F7777]">
-              Expected Value Optimization: <code className="text-[#202525] font-mono">EV = P(success) &times; (Amount - Cost)</code>.
-            </p>
           </div>
-
-          <div className="space-y-1.5">
-            <span className="font-semibold text-[13px] text-[#202525] block">
-              Defensible 3-Tier Evidence Structure
-            </span>
-            <ul className="space-y-1.5 text-[12px] text-[#6F7777]">
-              <li className="flex items-start gap-1.5">
-                <strong className="text-[#202525] shrink-0">1. Model Validation:</strong>
-                <span>750 held-out cases never seen in training (ROC-AUC: 0.9884, Precision: 93.96%).</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <strong className="text-[#202525] shrink-0">2. Economic Uplift:</strong>
-                <span>Large-scale macro benchmark (+5.47 pp absolute / +24.72% relative revenue uplift).</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <strong className="text-[#202525] shrink-0">3. Interactive Demo:</strong>
-                <span>15 deterministic test cases running live in this dashboard.</span>
-              </li>
-            </ul>
-          </div>
+          <h1 className="text-[22px] font-semibold text-[#202525] mt-1 leading-tight">
+            Machine Learning Efficacy &amp; Economic Uplift
+          </h1>
+          <p className="text-[12px] font-normal text-[#6F7777] mt-0.5">
+            Empirical comparative analysis: <strong>Static Dunning Baseline</strong> vs <strong>Random Forest Expected Value Policy</strong>.
+          </p>
         </div>
       </div>
 
@@ -102,7 +74,7 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
           <div className="flex items-center space-x-2">
             <Sparkles className="w-4 h-4 text-[#087F83]" />
             <h2 className="font-semibold text-[14px] uppercase tracking-wide text-[#202525]">
-              Held-Out Test Partition (750 Cases Never Seen In Training)
+              Held-Out Test Partition (750 Synthetic Cases Never Seen In Training)
             </h2>
           </div>
           <span className="text-[11px] font-mono font-semibold bg-[#F5F6F6] text-[#6F7777] px-2 py-0.5 rounded border border-[#E2E5E5]">
@@ -113,7 +85,7 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center font-mono">
           <div className="bg-[#F5F6F6] p-3 rounded-md border border-[#E2E5E5]">
             <span className="text-[11px] text-[#6F7777] uppercase block font-sans font-medium">ROC-AUC</span>
-            <span className="text-[16px] font-semibold text-[#087F83]">0.9884</span>
+            <span className="text-[16px] font-bold text-[#087F83]">0.9884</span>
           </div>
           <div className="bg-[#F5F6F6] p-3 rounded-md border border-[#E2E5E5]">
             <span className="text-[11px] text-[#6F7777] uppercase block font-sans font-medium">Precision</span>
@@ -137,7 +109,7 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
       {/* 3. Uplift KPI Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-lg bg-[#FFFFFF] border border-[#E2E5E5] space-y-1">
-          <span className="text-[14px] font-semibold text-[#6F7777] block">
+          <span className="text-[13px] font-semibold text-[#6F7777] uppercase block">
             Static Dunning Baseline
           </span>
           <div className="text-[26px] font-mono font-semibold text-[#202525] leading-tight">
@@ -150,12 +122,12 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
 
         <div className="p-4 rounded-lg bg-[#FFFFFF] border border-[#E2E5E5] space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[14px] font-semibold text-[#2E7D5B] block">
+            <span className="text-[13px] font-semibold text-[#2E7D5B] uppercase block">
               ML Expected Value Policy
             </span>
             <TrendingUp className="w-4 h-4 text-[#2E7D5B]" />
           </div>
-          <div className="text-[26px] font-mono font-semibold text-[#2E7D5B] leading-tight">
+          <div className="text-[26px] font-mono font-bold text-[#2E7D5B] leading-tight">
             59.9% <span className="text-[14px] font-normal text-[#2E7D5B]">recovery</span>
           </div>
           <span className="text-[12px] text-[#2E7D5B] block font-medium">
@@ -164,28 +136,37 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
         </div>
 
         <div className="p-4 rounded-lg bg-[#FFFFFF] border border-[#E2E5E5] space-y-1">
-          <span className="text-[14px] font-semibold text-[#087F83] block">
+          <span className="text-[13px] font-semibold text-[#087F83] uppercase block">
             Verified Uplift
           </span>
-          <div className="text-[26px] font-mono font-semibold text-[#087F83] leading-tight">
+          <div className="text-[26px] font-mono font-bold text-[#087F83] leading-tight">
             +5.47 pp <span className="text-[14px] font-semibold text-[#202525]">(+24.72% Rev)</span>
           </div>
           <span className="text-[12px] font-normal text-[#6F7777] block">
-            Evaluated on identical test partition
+            Evaluated on 750 identical test rows
           </span>
         </div>
       </div>
 
-      {/* 4. The Performance Chart */}
-      <PerformanceChart currentRecoveryINR={stats?.total_recovered_inr} />
+      {/* 4. 2-Column Split: The Synthetic Performance Curve + Synthetic Cause Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7">
+          <PerformanceChart currentRecoveryINR={stats?.total_recovered_inr} />
+        </div>
+        <div className="lg:col-span-5">
+          <RevenueAtRiskBreakdown isSynthetic={true} />
+        </div>
+      </div>
 
       {/* 5. Per-Cause Benchmark Breakdown Table */}
       <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg shadow-xs overflow-hidden">
         <div className="p-4 border-b border-[#E2E5E5] flex items-center justify-between">
-          <h2 className="font-semibold text-[16px] tracking-wide text-[#202525] uppercase">
-            Root Cause Uplift Breakdown (Empirical Benchmark)
+          <h2 className="font-semibold text-[15px] tracking-wide text-[#202525] uppercase">
+            Synthetic Benchmark Breakdown By Cause
           </h2>
-          <span className="text-[12px] font-normal text-[#6F7777]">7 Bounded Failure Causes</span>
+          <span className="text-[11px] font-mono font-bold text-[#087F83] bg-[#E6F4F1] px-2 py-0.5 rounded border border-[#B2DFDB] uppercase">
+            SYNTHETIC · BATCH
+          </span>
         </div>
 
         <div className="overflow-x-auto">

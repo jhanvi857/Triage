@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import {
   ArrowLeft,
+  ArrowDown,
   Check,
   CheckCircle2,
   XCircle,
@@ -98,6 +99,21 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
         <div>
           <div className="flex items-center space-x-2.5">
             <span className="font-mono text-[12px] font-medium text-[#6F7777]">{caseItem.id}</span>
+            {caseItem.source === "LIVE" ? (
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border ${
+                  caseItem.is_simulated
+                    ? "bg-[#FFFAF0] text-[#DD6B20] border-[#FEEBC8]"
+                    : "bg-[#EBF8F2] text-[#2F855A] border-[#C6F6D5]"
+                }`}
+              >
+                {caseItem.is_simulated ? "LIVE · SIMULATED" : "LIVE · VERIFIED"}
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border bg-[#F5F6F6] text-[#506361] border-[#E2E5E5]">
+                SYNTHETIC · BATCH
+              </span>
+            )}
             <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${getStatusBadgeClass()}`}>
               {caseItem.status}
             </span>
@@ -232,8 +248,8 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
         </div>
 
         {/* Downward Transition Arrow */}
-        <div className="flex justify-center text-[#6F7777] text-[14px]">
-          &darr;
+        <div className="flex justify-center text-[#6F7777] py-1">
+          <ArrowDown className="w-4 h-4 text-[#6F7777]" />
         </div>
 
         {/* Policy Check */}
@@ -249,24 +265,24 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
 
           <div className="mt-3 space-y-2 text-[13px]">
             <div className="flex items-center space-x-2 text-[#2E7D5B]">
-              <span className="font-bold text-[14px]">&check;</span>
+              <Check className="w-4 h-4 text-[#2E7D5B] shrink-0" />
               <span className="text-[#202525] font-medium">Candidate permitted</span>
-              <span className="text-[#6F7777] text-[12px] font-normal">&bull; Action is in pre-approved candidate set</span>
+              <span className="text-[#6F7777] text-[12px] font-normal">• Action is in pre-approved candidate set</span>
             </div>
             <div className="flex items-center space-x-2 text-[#2E7D5B]">
-              <span className="font-bold text-[14px]">&check;</span>
+              <Check className="w-4 h-4 text-[#2E7D5B] shrink-0" />
               <span className="text-[#202525] font-medium">Attempt limit</span>
-              <span className="text-[#6F7777] text-[12px] font-normal">&bull; Attempts ({caseItem.attempts_made}/{caseItem.max_attempts}) within safety bound</span>
+              <span className="text-[#6F7777] text-[12px] font-normal">• Attempts ({caseItem.attempts_made}/{caseItem.max_attempts}) within safety bound</span>
             </div>
             <div className="flex items-center space-x-2 text-[#2E7D5B]">
-              <span className="font-bold text-[14px]">&check;</span>
+              <Check className="w-4 h-4 text-[#2E7D5B] shrink-0" />
               <span className="text-[#202525] font-medium">Cooldown</span>
-              <span className="text-[#6F7777] text-[12px] font-normal">&bull; Required cooldown threshold met</span>
+              <span className="text-[#6F7777] text-[12px] font-normal">• Required cooldown threshold met</span>
             </div>
             <div className="flex items-center space-x-2 text-[#2E7D5B]">
-              <span className="font-bold text-[14px]">&check;</span>
+              <Check className="w-4 h-4 text-[#2E7D5B] shrink-0" />
               <span className="text-[#202525] font-medium">Amount threshold</span>
-              <span className="text-[#6F7777] text-[12px] font-normal">&bull; Transaction ₹{caseItem.amount_inr} eligible for automated dispatch</span>
+              <span className="text-[#6F7777] text-[12px] font-normal">• Transaction ₹{caseItem.amount_inr} eligible for automated dispatch</span>
             </div>
           </div>
         </div>
@@ -398,12 +414,20 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
               }`}
           >
             <div className="flex items-center justify-between">
-              <span className="font-semibold uppercase tracking-wide text-[11px]">
-                {ptpResult.promise_detected
-                  ? "✓ Promise-to-Pay Scheduled"
-                  : ptpResult.needs_human_review
-                    ? "⚠ Escalated to Human Review"
-                    : "No Promise Detected"}
+              <span className="font-semibold uppercase tracking-wide text-[11px] flex items-center gap-1">
+                {ptpResult.promise_detected ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#2E7D5B]" />
+                    <span>Promise-to-Pay Scheduled</span>
+                  </>
+                ) : ptpResult.needs_human_review ? (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5 text-[#B7791F]" />
+                    <span>Escalated to Human Review</span>
+                  </>
+                ) : (
+                  <span>No Promise Detected</span>
+                )}
               </span>
               <span className="font-mono text-[10px] bg-white/80 px-2 py-0.5 rounded border border-[#E2E5E5]">
                 Method: {ptpResult.parsing_method}
@@ -431,8 +455,9 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
           <h2 className="font-semibold text-[14px] text-[#202525]">
             Immutable SHA-256 Ledger State
           </h2>
-          <span className="font-mono text-[11px] text-[#2E7D5B] font-semibold bg-[#2E7D5B]/10 border border-[#2E7D5B]/20 px-2 py-0.5 rounded">
-            Chain Verified ✓
+          <span className="font-mono text-[11px] text-[#2E7D5B] font-semibold bg-[#2E7D5B]/10 border border-[#2E7D5B]/20 px-2 py-0.5 rounded flex items-center gap-1">
+            <Check className="w-3 h-3 text-[#2E7D5B]" />
+            <span>Chain Verified</span>
           </span>
         </div>
 

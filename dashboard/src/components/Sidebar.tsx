@@ -44,16 +44,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalCasesCount,
 }) => {
   const NAV_ITEMS: NavItemConfig[] = [
-    { id: "OVERVIEW", label: "Dashboard", icon: LayoutDashboard },
-    { id: "RECOVERY", label: "Recovery Queue", icon: RotateCcw, badge: totalCasesCount },
-    { id: "CASES", label: "Cases", icon: Layers },
-    { id: "EVALUATION", label: "Evaluation", icon: BarChart3 },
+    { id: "OVERVIEW", label: "Live Operations", icon: LayoutDashboard },
+    { id: "RECOVERY", label: "Recovery Queue", icon: RotateCcw },
+    { id: "CASES", label: "Pipeline", icon: Layers },
+    {
+      id: "EVALUATION",
+      label: "Evaluation",
+      icon: BarChart3,
+      badge: "SYNTHETIC",
+      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+    },
     { id: "AUDIT", label: "Audit Ledger", icon: ShieldCheck },
     { id: "PTP", label: "PTP Monitor", icon: Calendar },
     { id: "REPORTS", label: "Reports", icon: FileText },
     {
       id: "SETTINGS",
-      label: "Settings",
+      label: "Exceptions",
       icon: SettingsIcon,
       badge: exceptionCount > 0 ? exceptionCount : undefined,
       badgeColor: "bg-[#B7791F]/15 text-[#B7791F] border-[#B7791F]/30",

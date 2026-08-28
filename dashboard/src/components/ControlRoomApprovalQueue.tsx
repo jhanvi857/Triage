@@ -128,7 +128,7 @@ export const ControlRoomApprovalQueue: React.FC<ControlRoomApprovalQueueProps> =
             <ShoppingCart className="w-3.5 h-3.5 text-[#4C8DFF]" />
             <span>Catalog Reference</span>
           </div>
-          <span className="text-[9px] font-mono text-zinc-500">MCP SKUs</span>
+          <span className="text-[9px] font-mono text-zinc-500">Catalog SKUs</span>
         </div>
 
         <div className="space-y-1.5 text-[11px] font-mono">

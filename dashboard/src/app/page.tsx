@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Sidebar, NavTab } from "../components/Sidebar";
 import { TopBar } from "../components/TopBar";
 import { KpiMetrics } from "../components/KpiMetrics";
-import { PerformanceChart } from "../components/PerformanceChart";
 import { RecoveryQueueTable } from "../components/RecoveryQueueTable";
 import { RevenueAtRiskBreakdown } from "../components/RevenueAtRiskBreakdown";
 import { CaseDetailView } from "../components/CaseDetailView";
@@ -210,6 +209,19 @@ export default function RevenueControlPage() {
     );
   }, [cases, searchQuery]);
 
+  // STABLE SEPARATION: Split LIVE vs SYNTHETIC cases
+  const liveCases = useMemo(() => {
+    return filteredCases
+      .filter((c) => c.source === "LIVE")
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [filteredCases]);
+
+  const syntheticCases = useMemo(() => {
+    return filteredCases
+      .filter((c) => c.source !== "LIVE")
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [filteredCases]);
+
   const exceptionCases = cases.filter(
     (c) => c.status === "LOST" || c.status === "ESCALATED"
   );
@@ -224,7 +236,7 @@ export default function RevenueControlPage() {
           setSelectedCaseDetail(null);
         }}
         exceptionCount={exceptionCases.length}
-        totalCasesCount={cases.length}
+        totalCasesCount={liveCases.length}
       />
 
       {/* Main Content Area */}
@@ -254,32 +266,61 @@ export default function RevenueControlPage() {
             />
           ) : (
             <>
-              {/* 1. OVERVIEW / DASHBOARD TAB */}
+              {/* 1. OVERVIEW / DASHBOARD TAB (LIVE OPERATIONS ONLY) */}
               {activeTab === "OVERVIEW" && (
                 <div className="space-y-4">
-                  {/* Top 4 Operational KPI Cards */}
-                  <KpiMetrics stats={stats} caseCount={cases.length} />
+                  {/* Top 4 Operational KPI Cards computed strictly from LIVE transactions */}
+                  <KpiMetrics liveCases={liveCases} />
 
-                  {/* Underneath: 2-Column Split (Recovery Performance + Root Causes) */}
+                  {/* 2-Column Operational Telemetry Split: Root Causes & Webhook Telemetry */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                    <div className="lg:col-span-7">
-                      <PerformanceChart
-                        currentRecoveryINR={stats?.total_recovered_inr}
-                      />
+                    <div className="lg:col-span-6">
+                      <RevenueAtRiskBreakdown liveCases={liveCases} isSynthetic={false} />
                     </div>
-                    <div className="lg:col-span-5">
-                      <RevenueAtRiskBreakdown
-                        totalAtRiskINR={stats?.total_at_risk_inr}
-                      />
+                    <div className="lg:col-span-6">
+                      <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 font-sans space-y-3 flex flex-col justify-between h-full">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-[14px] tracking-wide text-[#202525] uppercase">
+                              Live Storefront Telemetry
+                            </h3>
+                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#E6F4F1] text-[#087F83] border border-[#B2DFDB] uppercase flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#087F83] animate-pulse"></span>
+                              SSE STREAM ACTIVE
+                            </span>
+                          </div>
+                          <p className="text-[12px] text-[#6F7777] mt-1.5 leading-relaxed">
+                            This live console listens exclusively for real checkouts from the <strong>Storefront (`localhost:5173`)</strong>. 
+                            Events arrive with cryptographic HMAC verification and are tagged as <code className="text-[#2F855A] font-bold">LIVE · VERIFIED</code> (or <code className="text-[#DD6B20] font-bold">LIVE · SIMULATED</code>).
+                          </p>
+                        </div>
+
+                        <div className="bg-[#F5F6F6] rounded-md p-3 border border-[#E2E5E5] text-[12px] space-y-1.5 font-mono">
+                          <div className="flex justify-between text-[#6F7777]">
+                            <span>Live Customer Declines:</span>
+                            <span className="font-bold text-[#202525]">{liveCases.length}</span>
+                          </div>
+                          <div className="flex justify-between text-[#6F7777]">
+                            <span>Recovered on Alternative Rails:</span>
+                            <span className="font-bold text-[#2E7D5B]">{liveCases.filter(c => c.status === "RECOVERED").length}</span>
+                          </div>
+                          <div className="flex justify-between text-[#6F7777]">
+                            <span>Synthetic Model Benchmark:</span>
+                            <span className="text-[#087F83] font-semibold">{syntheticCases.length} Cases (in Evaluation tab)</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Hero Main Component: Dense Recovery Queue Transaction Table */}
+                  {/* Main Recovery Queue Table showing ONLY LIVE cases */}
                   <RecoveryQueueTable
-                    cases={filteredCases}
+                    cases={liveCases}
                     onSelectCase={(c) => setSelectedCaseDetail(c)}
                     onAdvanceCase={handleAdvanceCase}
                     processingId={processingId}
+                    title="Live Operations Recovery Queue"
+                    subtitle={liveCases.length === 0 ? "Awaiting storefront events" : `${liveCases.length} live checkout failure${liveCases.length === 1 ? "" : "s"}`}
                   />
                 </div>
               )}
@@ -288,10 +329,12 @@ export default function RevenueControlPage() {
               {activeTab === "RECOVERY" && (
                 <div className="space-y-4">
                   <RecoveryQueueTable
-                    cases={filteredCases}
+                    cases={liveCases}
                     onSelectCase={(c) => setSelectedCaseDetail(c)}
                     onAdvanceCase={handleAdvanceCase}
                     processingId={processingId}
+                    title="Live Operations Queue"
+                    subtitle={liveCases.length === 0 ? "Awaiting live checkout failures" : `${liveCases.length} live operational cases`}
                   />
                 </div>
               )}
@@ -308,7 +351,7 @@ export default function RevenueControlPage() {
                 />
               )}
 
-              {/* 4. EVALUATION TAB */}
+              {/* 4. EVALUATION TAB (EXCLUSIVELY FOR SYNTHETIC MODEL EVALUATION) */}
               {activeTab === "EVALUATION" && (
                 <AnalyticsUpliftView
                   stats={stats}
@@ -337,10 +380,11 @@ export default function RevenueControlPage() {
                     </p>
                   </div>
                   <RecoveryQueueTable
-                    cases={filteredCases}
+                    cases={liveCases}
                     onSelectCase={(c) => setSelectedCaseDetail(c)}
                     onAdvanceCase={handleAdvanceCase}
                     processingId={processingId}
+                    title="Live Cases PTP Queue"
                   />
                 </div>
               )}

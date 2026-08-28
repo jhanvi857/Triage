@@ -94,10 +94,13 @@ export interface TriageCase {
   error_source?: string;
   error_step?: string;
   status: CaseStatus;
+  source?: "LIVE" | "SYNTHETIC" | string;
+  allowed_actions?: string[];
   diagnosis?: DiagnosticReport;
   intervention?: InterventionDecision;
   ptp_status?: PTPParseResult;
   customer_facing_msg?: string;
+  is_simulated?: boolean;
   payday_proximity_days?: number;
   historical_success_rate?: number;
   attempts_made: number;

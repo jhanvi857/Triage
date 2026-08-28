@@ -71,7 +71,7 @@ const VerdictStamp: React.FC<{ verdict: string; status: string; id: string }> = 
           className="w-full h-full rounded-full border flex flex-col items-center justify-center text-center p-1 bg-[#0B0E14]/70 backdrop-blur-xs"
         >
           <span className="text-[7px] font-mono tracking-widest uppercase opacity-75">
-            ★ LEDGER ★
+            LEDGER
           </span>
           <span className="text-[10px] font-mono font-black tracking-wider uppercase leading-none my-0.5">
             {label}

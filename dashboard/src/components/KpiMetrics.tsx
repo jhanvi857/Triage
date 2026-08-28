@@ -1,80 +1,106 @@
 "use client";
 
 import React from "react";
-import { ArrowUpRight } from "lucide-react";
-import { SummaryStats } from "../lib/types";
+import { ArrowUpRight, Zap, ShieldAlert, CheckCircle2, ShieldCheck } from "lucide-react";
+import { TriageCase } from "../lib/types";
 
 interface KpiMetricsProps {
-  stats: SummaryStats | null;
-  caseCount: number;
+  liveCases: TriageCase[];
 }
 
-export const KpiMetrics: React.FC<KpiMetricsProps> = ({ stats, caseCount }) => {
-  // Format numbers in Lakhs (L) or standard INR
-  const formatLakhs = (amountINR: number) => {
+export const KpiMetrics: React.FC<KpiMetricsProps> = ({ liveCases }) => {
+  const formatINR = (amountINR: number) => {
     if (amountINR >= 100000) {
-      return `₹${(amountINR / 100000).toFixed(1)}L`;
+      return `₹${(amountINR / 100000).toFixed(2)}L`;
     }
-    return `₹${amountINR.toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
+    return `₹${amountINR.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const atRiskINR = stats?.total_at_risk_inr ?? 6540000;
-  const recoveredINR = stats?.total_recovered_inr ?? 3086880;
-  const recoveryRate = stats?.recovery_rate_percent ?? 47.2;
-  const humanReviewCount = stats?.unresolved_exceptions ?? 17;
+  // Compute strictly from LIVE storefront transactions
+  const totalAtRiskINR = liveCases.reduce((sum, c) => sum + (c.amount_inr || (c.amount_paise / 100.0)), 0);
+  
+  const recoveredINR = liveCases
+    .filter((c) => c.status === "RECOVERED")
+    .reduce((sum, c) => sum + (c.recovered_amount_paise ? (c.recovered_amount_paise / 100.0) : c.amount_inr), 0);
+
+  const recoveryRate = totalAtRiskINR > 0 ? (recoveredINR / totalAtRiskINR) * 100.0 : 0.0;
+  
+  const activeInterventions = liveCases.filter((c) => c.status === "INTERVENING" || c.status === "DIAGNOSED" || c.status === "NEW").length;
+  const humanEscalations = liveCases.filter((c) => c.status === "ESCALATED" || c.status === "LOST").length;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
-      {/* 1. Revenue at Risk */}
-      <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
-        <span className="text-[14px] font-semibold text-[#6F7777] block">
-          Revenue at Risk
-        </span>
-        <div className="font-mono text-[26px] font-semibold text-[#202525] leading-tight">
-          {formatLakhs(atRiskINR)}
+      {/* 1. Live Revenue at Risk */}
+      <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1 relative overflow-hidden">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
+            Live Revenue at Risk
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold bg-[#E6F4F1] text-[#087F83] px-2 py-0.5 rounded border border-[#B2DFDB]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#087F83] animate-pulse"></span>
+            LIVE
+          </span>
+        </div>
+        <div className="font-mono text-[26px] font-bold text-[#202525] leading-tight">
+          {formatINR(totalAtRiskINR)}
         </div>
         <div className="text-[12px] font-normal text-[#6F7777] pt-0.5">
-          Active payment declines
+          {liveCases.length === 0 ? "Awaiting storefront events" : `${liveCases.length} real checkout failure${liveCases.length === 1 ? "" : "s"}`}
         </div>
       </div>
 
-      {/* 2. Recovered */}
+      {/* 2. Live Recovered */}
       <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
-        <span className="text-[14px] font-semibold text-[#6F7777] block">
-          Recovered
-        </span>
-        <div className="font-mono text-[26px] font-semibold text-[#087F83] leading-tight">
-          {formatLakhs(recoveredINR)}
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
+            Live Recovered
+          </span>
+          <CheckCircle2 className="w-4 h-4 text-[#087F83]" />
+        </div>
+        <div className="font-mono text-[26px] font-bold text-[#087F83] leading-tight">
+          {formatINR(recoveredINR)}
         </div>
         <div className="text-[12px] font-medium text-[#2E7D5B] flex items-center gap-0.5 pt-0.5">
-          <ArrowUpRight className="w-3.5 h-3.5 text-[#2E7D5B]" />
-          <span>+24.7% revenue uplift</span>
+          {recoveredINR > 0 ? (
+            <>
+              <ArrowUpRight className="w-3.5 h-3.5 text-[#2E7D5B]" />
+              <span>Idempotently settled on-rail</span>
+            </>
+          ) : (
+            <span className="text-[#6F7777]">0 recovered captures</span>
+          )}
         </div>
       </div>
 
-      {/* 3. Recovery Rate */}
+      {/* 3. Live Recovery Rate */}
       <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
-        <span className="text-[14px] font-semibold text-[#6F7777] block">
-          Recovery Rate
-        </span>
-        <div className="font-mono text-[26px] font-semibold text-[#202525] leading-tight">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
+            Live Recovery Rate
+          </span>
+          <Zap className="w-4 h-4 text-[#087F83]" />
+        </div>
+        <div className="font-mono text-[26px] font-bold text-[#202525] leading-tight">
           {recoveryRate.toFixed(1)}%
         </div>
         <div className="text-[12px] font-medium text-[#2E7D5B] pt-0.5">
-          +5.47 pp vs static baseline
+          {liveCases.length === 0 ? "Awaiting first resolution" : `${liveCases.filter(c => c.status === "RECOVERED").length} of ${liveCases.length} resolved`}
         </div>
       </div>
 
-      {/* 4. Human Review */}
+      {/* 4. Active In-Flight Interventions */}
       <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
-        <span className="text-[14px] font-semibold text-[#6F7777] block">
-          Human Review
-        </span>
-        <div className="font-mono text-[26px] font-semibold text-[#B7791F] leading-tight">
-          {humanReviewCount}
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
+            In-Flight Actions
+          </span>
+          <ShieldCheck className="w-4 h-4 text-[#0E4B4C]" />
+        </div>
+        <div className="font-mono text-[26px] font-bold text-[#0E4B4C] leading-tight">
+          {activeInterventions}
         </div>
         <div className="text-[12px] font-normal text-[#6F7777] pt-0.5">
-          Policy stopping rules triggered
+          {humanEscalations > 0 ? `${humanEscalations} escalated to human desk` : "Active policy interventions"}
         </div>
       </div>
     </div>

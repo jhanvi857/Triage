@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Clock, CheckCircle2, AlertOctagon, UserCheck, Sparkles, ShieldCheck } from "lucide-react";
+import { Clock, CheckCircle2, AlertOctagon, UserCheck, Sparkles, ShieldCheck, AlertTriangle } from "lucide-react";
 import { TriageCase } from "../lib/types";
 
 interface TriageCaseCardProps {
@@ -109,9 +109,26 @@ export const TriageCaseCard: React.FC<TriageCaseCardProps> = ({
 
       {/* 2. Top Header: Case ID & Company Name */}
       <div className="pr-24 space-y-1">
-        <span className="font-mono text-[10px] text-[#506361] block font-medium">
-          {caseItem.id}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] text-[#506361] block font-medium">
+            {caseItem.id}
+          </span>
+          {caseItem.source === "LIVE" ? (
+            <span
+              className={`px-1.5 py-0.5 rounded-sm text-[8px] font-mono font-bold tracking-wider uppercase border ${
+                caseItem.is_simulated
+                  ? "bg-[#FFFAF0] text-[#DD6B20] border-[#FEEBC8]"
+                  : "bg-[#EBF8F2] text-[#2F855A] border-[#C6F6D5]"
+              }`}
+            >
+              {caseItem.is_simulated ? "LIVE · SIMULATED" : "LIVE · VERIFIED"}
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.5 rounded-sm text-[8px] font-mono font-bold tracking-wider uppercase border bg-[#F5F6F6] text-[#506361] border-[#E2E5E5]">
+              SYNTHETIC · BATCH
+            </span>
+          )}
+        </div>
         <h4 className="font-dispatch font-bold text-sm tracking-wider text-[#182628] uppercase break-words leading-tight">
           {caseItem.customer_name}
         </h4>
@@ -176,8 +193,9 @@ export const TriageCaseCard: React.FC<TriageCaseCardProps> = ({
             </div>
           )}
           {isVetoed && (
-            <div className="text-[10px] text-[#A34731] font-bold font-sans bg-[#E08E79]/20 p-1 rounded border border-[#E08E79]/40">
-              ⚠ VETOED by Deterministic Policy
+            <div className="text-[10px] text-[#A34731] font-bold font-sans bg-[#E08E79]/20 p-1 rounded border border-[#E08E79]/40 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 text-[#A34731] shrink-0" />
+              <span>VETOED by Deterministic Policy</span>
             </div>
           )}
         </div>

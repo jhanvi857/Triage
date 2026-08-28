@@ -323,6 +323,9 @@ export const BatchEvaluationModal: React.FC<BatchEvaluationModalProps> = ({
                         <div className="space-y-0.5 pr-3">
                           <div className="flex items-center space-x-2">
                             <span className="font-mono text-[12px] font-medium text-[#6F7777]">{c.id}</span>
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-[#F4F8F7] text-[#2D5A56] border border-[#D1E2E0]">
+                              SYNTHETIC · BATCH
+                            </span>
                             <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#B7791F]/10 text-[#B7791F] border border-[#B7791F]/20">
                               {c.status}
                             </span>

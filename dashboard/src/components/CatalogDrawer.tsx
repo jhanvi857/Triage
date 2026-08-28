@@ -23,7 +23,7 @@ export const CatalogDrawer: React.FC<CatalogDrawerProps> = ({ isOpen, onClose, p
               <Layers className="w-4 h-4 text-zinc-300" />
               <div>
                 <h3 className="font-bold text-white text-sm">Merchant Product Catalog</h3>
-                <p className="text-[11px] text-zinc-400">Exposed to AI Agents via MCP Tools</p>
+                <p className="text-[11px] text-zinc-400">Available Plans &amp; Resource Tiers</p>
               </div>
             </div>
             <button
@@ -87,7 +87,7 @@ export const CatalogDrawer: React.FC<CatalogDrawerProps> = ({ isOpen, onClose, p
         </div>
 
         <div className="pt-3 border-t border-zinc-800 text-[10px] text-zinc-500 font-mono">
-          MCP Tools: <code>list_products</code>, <code>check_price</code>, <code>initiate_purchase</code>
+          Endpoints: <code>/api/v1/products</code>, <code>/api/v1/purchase/initiate</code>
         </div>
       </div>
     </div>

@@ -54,7 +54,7 @@ export const ScenarioRunnerModal: React.FC<ScenarioRunnerModalProps> = ({
         const pData = await pRes.json();
         appendLog(`Gateway Verdict: ${pData.status}`);
         appendLog(`Razorpay Order ID: ${pData.razorpay_order_id}, Payment: ${pData.razorpay_payment_id}`);
-        appendLog("✓ Scenario 1 Completed Successfully!");
+        appendLog("[SUCCESS] Scenario 1 Completed Successfully");
 
       } else if (scenarioNumber === 2) {
         // Scenario 2: Over Budget & Recovery
@@ -88,7 +88,7 @@ export const ScenarioRunnerModal: React.FC<ScenarioRunnerModalProps> = ({
         const pData2 = await pRes2.json();
         appendLog(`Gateway Recovery Verdict: ${pData2.status}`);
         appendLog(`Razorpay Order ID: ${pData2.razorpay_order_id}`);
-        appendLog("✓ Scenario 2 Completed: Graceful adaptation without crashing!");
+        appendLog("[SUCCESS] Scenario 2 Completed: Graceful adaptation without crashing");
 
       } else if (scenarioNumber === 3) {
         // Scenario 3: High-Value Threshold Gate
@@ -129,7 +129,7 @@ export const ScenarioRunnerModal: React.FC<ScenarioRunnerModalProps> = ({
             }),
           });
         } catch (_) {}
-        appendLog("⚡ Network Disconnection Triggered (Simulated Timeout)");
+        appendLog("[TIMEOUT] Network Disconnection Triggered (Simulated Timeout)");
 
         appendLog("Attempt 2: Retrying request with EXACT SAME idempotency key...");
         const pRes2 = await fetch(`${gatewayUrl}/api/v1/purchase/initiate`, {
@@ -146,7 +146,7 @@ export const ScenarioRunnerModal: React.FC<ScenarioRunnerModalProps> = ({
         const pData2 = await pRes2.json();
         appendLog(`Gateway Replay Verdict: ${pData2.status}`);
         appendLog(`Cached Razorpay Order ID: ${pData2.razorpay_order_id}`);
-        appendLog("✓ Idempotency Confirmed: Zero double billing!");
+        appendLog("[CONFIRMED] Idempotency Confirmed: Zero double billing");
       }
     } catch (err: any) {
       appendLog(`Error: ${err.message}`);
