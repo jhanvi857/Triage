@@ -173,6 +173,7 @@ func (h *Harness) RunBatch(numCases int) Result {
 			AttemptsMade:          0,
 			MaxAttempts:           3,
 			IdempotencyKey:        fmt.Sprintf("idem_%s", caseID),
+			Source:                "SYNTHETIC",
 			CreatedAt:             now,
 			UpdatedAt:             now,
 		}
