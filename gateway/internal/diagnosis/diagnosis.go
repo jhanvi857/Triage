@@ -88,16 +88,18 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 	}
 
 	// 3. Bank Downtime / Timeout (HTTP 504 / Issuer core system unavailable)
-	if (source == "bank" && strings.Contains(desc, "timeout")) ||
-		reason == "gateway_timeout" || strings.Contains(fullText, "504") ||
-		strings.Contains(fullText, "bank_down") || strings.Contains(fullText, "issuer_unavailable") ||
-		strings.Contains(fullText, "gateway_error") || strings.Contains(fullText, "timeout") {
+	if reason == "bank_technical_decline" || reason == "gateway_timeout" ||
+		(source == "bank" && strings.Contains(desc, "timeout")) ||
+		strings.Contains(fullText, "504") || strings.Contains(fullText, "bank_down") ||
+		strings.Contains(fullText, "issuer_unavailable") || strings.Contains(fullText, "gateway_error") ||
+		strings.Contains(fullText, "timeout") || strings.Contains(fullText, "did not respond") ||
+		strings.Contains(fullText, "network error") {
 		return DiagnosticReport{
 			CaseID:              caseID,
 			RootCause:           CauseBankDowntime,
 			ConfidenceScore:     0.98,
-			TechnicalReason:     "Issuer bank core banking system timed out or returned HTTP 504",
-			CustomerFacingMsg:   "Bank network is temporarily congested. Automated retry scheduled for off-peak hours.",
+			TechnicalReason:     "Issuer bank core banking system timed out or returned HTTP 504 / gateway error",
+			CustomerFacingMsg:   "Bank network is temporarily congested. You can switch rails or schedule an automated retry.",
 			IsRecoverable:       true,
 			RequiresHumanReview: false,
 			RecommendedAction:   "RETRY_SAME_RAIL_COOLDOWN",
@@ -105,19 +107,22 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 		}
 	}
 
-	// 4. Mandate Revoked / Subscription Authorization Cancelled
+	// 4. Mandate Revoked / Subscription Authorization Cancelled / Limit Exceeded
 	if reason == "mandate_cancelled_at_bank" || reason == "mandate_revoked" ||
-		strings.Contains(fullText, "mandate_revoked") || strings.Contains(fullText, "auth_cancelled") ||
-		strings.Contains(fullText, "mandate_failed") || strings.Contains(fullText, "mandate cancelled") {
+		reason == "mandate_max_amount_breached" || reason == "mandate_limit" ||
+		strings.Contains(fullText, "mandate") || strings.Contains(fullText, "limit_exceeded") ||
+		strings.Contains(fullText, "auth_cancelled") || strings.Contains(fullText, "mandate_failed") ||
+		strings.Contains(fullText, "mandate cancelled") || strings.Contains(fullText, "auto-debit") ||
+		strings.Contains(fullText, "exceeds maximum") {
 		return DiagnosticReport{
 			CaseID:              caseID,
 			RootCause:           CauseMandateRevoked,
 			ConfidenceScore:     0.99,
-			TechnicalReason:     "Recurring e-mandate cancelled at destination bank.",
-			CustomerFacingMsg:   "Recurring autopay authorization was paused.",
+			TechnicalReason:     "Recurring e-mandate limit breached or authorization revoked at destination bank.",
+			CustomerFacingMsg:   "Recurring autopay authorization was interrupted. Complete payment securely via 1-Click UPI.",
 			IsRecoverable:       true,
-			RequiresHumanReview: amountPaise >= 1000000,
-			RecommendedAction:   "INCENTIVE_DISCOUNT",
+			RequiresHumanReview: false,
+			RecommendedAction:   "SWITCH_RAIL_UPI",
 			DiagnosedAt:         now,
 		}
 	}
