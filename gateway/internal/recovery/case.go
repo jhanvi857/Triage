@@ -39,9 +39,12 @@ type Case struct {
 	ErrorSource            string                      `json:"error_source,omitempty"`
 	ErrorStep              string                      `json:"error_step,omitempty"`
 	Status                 string                      `json:"status"`
+	Source                 string                      `json:"source"` // "LIVE" or "SYNTHETIC"
+	AllowedActions         []string                    `json:"allowed_actions,omitempty"`
 	Diagnosis              *diagnosis.DiagnosticReport `json:"diagnosis,omitempty"`
 	Intervention           *intervention.Decision      `json:"intervention,omitempty"`
 	PTPStatus              *ptp.ParseResult            `json:"ptp_status,omitempty"`
+	IsSimulated            bool                        `json:"is_simulated,omitempty"`
 	CustomerFacingMsg      string                      `json:"customer_facing_msg,omitempty"`
 	PaydayProximityDays    int                         `json:"payday_proximity_days,omitempty"`
 	HistoricalSuccessRate  float64                     `json:"historical_success_rate,omitempty"`
@@ -217,7 +220,32 @@ func (m *Manager) seedDefaultCases() {
 	}
 
 	for _, c := range cases {
+		c.Source = "SYNTHETIC"
+		m.ensureAllowedActions(c)
 		m.cases[c.ID] = c
+	}
+}
+
+func (m *Manager) ensureAllowedActions(c *Case) {
+	if len(c.AllowedActions) == 0 {
+		if c.Diagnosis != nil && c.Diagnosis.RootCause != "" {
+			c.AllowedActions = intervention.GetAllowedCandidates(c.Diagnosis.RootCause)
+		} else {
+			switch c.ErrorCode {
+			case "GATEWAY_TIMEOUT_504", "BANK_TECHNICAL_ERROR":
+				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseBankDowntime)
+			case "INSUFFICIENT_FUNDS", "BALANCE_INSUFFICIENT":
+				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseInsufficientFunds)
+			case "3DS_DROP_OFF", "OTP_EXPIRED":
+				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseOtpDropoff)
+			case "MANDATE_MAX_LIMIT_EXCEEDED", "MANDATE_REVOKED":
+				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseMandateRevoked)
+			case "CARD_EXPIRED":
+				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseExpiredCard)
+			default:
+				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseBankDowntime)
+			}
+		}
 	}
 }
 
@@ -229,6 +257,7 @@ func (m *Manager) GetCase(caseID string) (*Case, bool) {
 	if !exists {
 		return nil, false
 	}
+	m.ensureAllowedActions(c)
 	cp := *c
 	return &cp, true
 }
@@ -239,6 +268,7 @@ func (m *Manager) ListCases() []*Case {
 	defer m.mu.RUnlock()
 	list := make([]*Case, 0, len(m.cases))
 	for _, c := range m.cases {
+		m.ensureAllowedActions(c)
 		cp := *c
 		list = append(list, &cp)
 	}
@@ -257,6 +287,7 @@ func (m *Manager) SaveCase(c *Case, actionTaken, reasoning string) {
 
 	c.UpdatedAt = time.Now().UTC()
 	c.AmountINR = float64(c.AmountPaise) / 100.0
+	m.ensureAllowedActions(c)
 	m.cases[c.ID] = c
 
 	// Append to immutable recovery ledger

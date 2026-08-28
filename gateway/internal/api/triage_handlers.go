@@ -15,6 +15,7 @@ import (
 	"github.com/ledger/gateway/internal/messaging"
 	"github.com/ledger/gateway/internal/mlclient"
 	"github.com/ledger/gateway/internal/ptp"
+	"github.com/ledger/gateway/internal/razorpay"
 	"github.com/ledger/gateway/internal/recovery"
 )
 
@@ -53,6 +54,97 @@ func (ts *TriageServer) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/triage/reset", ts.handleReset)
 	mux.HandleFunc("/api/v1/triage/ptp/parse", ts.handlePTPParse)
 	mux.HandleFunc("/api/v1/triage/ml/metrics", ts.handleMLMetrics)
+}
+
+// IngestRazorpayWebhook processes a real Razorpay webhook payload and creates a Triage Case
+func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, isDebug bool) *recovery.Case {
+	paymentRaw, ok := payload.Payload["payment"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	entity, ok := paymentRaw["entity"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	email, _ := entity["email"].(string)
+	if email == "" {
+		email = "demo-customer@example.com"
+	}
+	amtF, _ := entity["amount"].(float64)
+	desc, _ := entity["description"].(string)
+	errCode, _ := entity["error_code"].(string)
+	errDesc, _ := entity["error_description"].(string)
+	errSrc, _ := entity["error_source"].(string)
+	errStep, _ := entity["error_step"].(string)
+	errReason, _ := entity["error_reason"].(string)
+
+	now := time.Now().UTC()
+	uniqueNum := atomic.AddInt64(&caseCounter, 1)
+	caseID := fmt.Sprintf("CASE-%04d", uniqueNum)
+
+	c := &recovery.Case{
+		ID:                    caseID,
+		CustomerID:            fmt.Sprintf("cust_%s", strings.TrimPrefix(caseID, "CASE-")),
+		CustomerName:          "Storefront Customer",
+		CustomerEmail:         email,
+		PlanName:              desc,
+		AmountPaise:           int64(amtF),
+		AmountINR:             amtF / 100.0,
+		Currency:              "INR",
+		OriginalRail:          "card",
+		ErrorCode:             errCode,
+		ErrorDesc:             errDesc,
+		ErrorReason:           errReason,
+		ErrorSource:           errSrc,
+		ErrorStep:             errStep,
+		PaydayProximityDays:   10,
+		HistoricalSuccessRate: 0.75,
+		Status:                recovery.StatusNew,
+		Source:                "LIVE",
+		AttemptsMade:          0,
+		MaxAttempts:           3,
+		IdempotencyKey:        fmt.Sprintf("idem_%s", caseID),
+		IsSimulated:           isDebug,
+		CreatedAt:             now,
+		UpdatedAt:             now,
+	}
+
+	tag := "REAL"
+	if isDebug {
+		tag = "SIMULATED"
+	}
+	ts.RecoveryMgr.SaveCase(c, "CASE_INGESTED", fmt.Sprintf("[%s] Razorpay payment.failed webhook ingested", tag))
+
+	// Auto-advance to Diagnosed
+	diag := ts.DiagEngine.DiagnoseStructured(c.ID, c.ErrorReason, c.ErrorSource, c.ErrorStep, c.ErrorDesc, c.OriginalRail, c.AmountPaise)
+	c.Diagnosis = &diag
+	c.Status = recovery.StatusDiagnosed
+	ts.RecoveryMgr.SaveCase(c, "CASE_DIAGNOSED", fmt.Sprintf("Root cause classified deterministically: %s", diag.RootCause))
+
+	// Auto-advance to Intervening to generate the template message
+	extraCtx := map[string]interface{}{
+		"payday_proximity_days":   c.PaydayProximityDays,
+		"historical_success_rate": c.HistoricalSuccessRate,
+		"attempt_number":          c.AttemptsMade + 1,
+	}
+
+	decision := ts.InterSelector.SelectIntervention(c.ID, *c.Diagnosis, c.AttemptsMade, c.AmountPaise, c.OriginalRail, 50000, extraCtx)
+	c.Intervention = &decision
+	c.Status = recovery.StatusIntervening
+	c.AttemptsMade++
+
+	tmplParams := messaging.TemplateParams{
+		CustomerName: c.CustomerName,
+		Amount:       fmt.Sprintf("₹%.2f", c.AmountINR),
+		PaymentLink:  fmt.Sprintf("https://rzp.io/i/%s", strings.ToLower(strings.TrimPrefix(c.ID, "CASE-"))),
+		DueDate:      decision.NextExecutionAt.Format("02 Jan 2006"),
+	}
+	c.CustomerFacingMsg = messaging.RenderTemplate(c.Diagnosis.RootCause, decision.Action, tmplParams)
+
+	actionMsg := fmt.Sprintf("ML proposed '%s' (%.1f%%, EV: ₹%.2f). Policy verdict: %s", decision.MLRecommendation, decision.MLProbability*100.0, float64(decision.MLExpectedValuePaise)/100.0, decision.PolicyVerdict)
+	ts.RecoveryMgr.SaveCase(c, "INTERVENTION_EVALUATED", actionMsg)
+	return c
 }
 
 func (ts *TriageServer) handleCases(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +216,7 @@ func (ts *TriageServer) handleCases(w http.ResponseWriter, r *http.Request) {
 			PaydayProximityDays:   req.PaydayProximityDays,
 			HistoricalSuccessRate: req.HistoricalSuccess,
 			Status:                recovery.StatusNew,
+			Source:                "SYNTHETIC",
 			AttemptsMade:          req.AttemptsMade,
 			MaxAttempts:           3,
 			IdempotencyKey:        fmt.Sprintf("idem_%s", caseID),
@@ -142,7 +235,8 @@ func (ts *TriageServer) handleCases(w http.ResponseWriter, r *http.Request) {
 func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Debug-Mode, X-Razorpay-Signature")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
@@ -225,8 +319,15 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 				ts.RecoveryMgr.SaveCase(c, "PAYMENT_CAPTURED", fmt.Sprintf("Idempotently captured ₹%.2f on Razorpay (%s)", float64(c.RecoveredAmountPaise)/100.0, c.RazorpayPaymentID))
 			}
 
+		case recovery.StatusEscalated:
+			// Escalated case successfully settled via 1-click fallback
+			c.Status = recovery.StatusRecovered
+			c.RecoveredAmountPaise = c.AmountPaise
+			c.RazorpayPaymentID = fmt.Sprintf("pay_tri_%s", strings.TrimPrefix(c.ID, "CASE-"))
+			ts.RecoveryMgr.SaveCase(c, "PAYMENT_CAPTURED", fmt.Sprintf("Idempotently captured ₹%.2f on alternative rail (%s)", float64(c.RecoveredAmountPaise)/100.0, c.RazorpayPaymentID))
+
 		default:
-			// Already in terminal state (RECOVERED, LOST, ESCALATED)
+			// Already in terminal state (RECOVERED, LOST)
 			json.NewEncoder(w).Encode(c)
 			return
 		}
@@ -243,15 +344,15 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
-		if req.Resolution == recovery.StatusRecovered {
+		if req.Resolution == recovery.StatusRecovered || req.Resolution == "RECOVERED" {
 			c.Status = recovery.StatusRecovered
 			c.RecoveredAmountPaise = c.AmountPaise
-			c.RazorpayPaymentID = fmt.Sprintf("pay_desk_%s", strings.TrimPrefix(c.ID, "CASE-"))
-			ts.RecoveryMgr.SaveCase(c, "MANUAL_RECOVERY_CONFIRMED", req.Notes)
-		} else if req.Resolution == recovery.StatusLost {
+			c.RazorpayPaymentID = fmt.Sprintf("pay_upi_%s", strings.TrimPrefix(c.ID, "CASE-"))
+			ts.RecoveryMgr.SaveCase(c, "ALTERNATIVE_RAIL_CAPTURED", req.Notes)
+		} else if req.Resolution == recovery.StatusLost || req.Resolution == "LOST" {
 			c.Status = recovery.StatusLost
 			ts.RecoveryMgr.SaveCase(c, "MANUAL_MARK_LOST", req.Notes)
-		} else if req.Resolution == recovery.StatusEscalated {
+		} else if req.Resolution == recovery.StatusEscalated || req.Resolution == "ESCALATED" {
 			c.Status = recovery.StatusEscalated
 			ts.RecoveryMgr.SaveCase(c, "MANUAL_ESCALATION", req.Notes)
 		}

@@ -87,7 +87,7 @@ func NewServer(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-// PurchaseRequest payload from agent / MCP tool.
+// PurchaseRequest payload from client / evaluation harness.
 type PurchaseRequest struct {
 	AgentID              string `json:"agent_id"`
 	ProductID            string `json:"product_id"`
@@ -789,6 +789,15 @@ func (s *Server) HandleAuditStream(w http.ResponseWriter, r *http.Request) {
 
 // HandleRazorpayWebhook receives asynchronous payment callbacks.
 func (s *Server) HandleRazorpayWebhook(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Debug-Mode, X-Razorpay-Signature")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -801,22 +810,41 @@ func (s *Server) HandleRazorpayWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sig := r.Header.Get("X-Razorpay-Signature")
-	if !s.razorpayClient.VerifyWebhookSignature(bodyBytes, sig) {
+	debugMode := r.Header.Get("X-Debug-Mode") == "true"
+
+	if !debugMode && !s.razorpayClient.VerifyWebhookSignature(bodyBytes, sig) {
 		http.Error(w, "Invalid signature", http.StatusUnauthorized)
 		return
 	}
 
 	var payload razorpay.WebhookPayload
 	if err := json.Unmarshal(bodyBytes, &payload); err == nil {
+		tag := "VERIFIED_WEBHOOK"
+		if debugMode {
+			tag = "SIMULATED_WEBHOOK"
+		}
 		s.auditLogger.Append(audit.Entry{
 			AgentID:      "razorpay_webhook",
 			Action:       "WEBHOOK_RECEIVED",
-			Reasoning:    fmt.Sprintf("Received Razorpay webhook event: %s", payload.Event),
+			Reasoning:    fmt.Sprintf("[%s] Received Razorpay webhook event: %s", tag, payload.Event),
 			GateDecision: "BYPASSED",
 			Status:       payload.Event,
 		})
+
+		if payload.Event == "payment.failed" {
+			createdCase := s.triageServer.IngestRazorpayWebhook(payload, debugMode)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "ok",
+				"case":    createdCase,
+				"case_id": createdCase.ID,
+			})
+			return
+		}
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
 }

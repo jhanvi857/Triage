@@ -49,7 +49,7 @@ func main() {
  / /__ / _/ / // // (_ // _/ / , _/
 /____//___//____/ \___//___//_/|_|  v1.0.0
                                   
-Autonomous AI Agent Payment Authorization Gateway
+Autonomous Payment Recovery & Triage Gateway
 Built on Razorpay Test-Mode APIs & Token-Bucket Gating`)
 	fmt.Println("------------------------------------------------------------")
 	fmt.Printf("[GATEWAY] Listening on            : http://0.0.0.0:%s\n", port)

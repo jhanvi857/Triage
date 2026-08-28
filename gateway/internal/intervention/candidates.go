@@ -13,14 +13,16 @@ const (
 	ActionIncentiveDiscount     = "INCENTIVE_DISCOUNT"
 	ActionCustomerPaymentLink   = "CUSTOMER_PAYMENT_LINK"
 	ActionRetryAuthentication   = "RETRY_AUTHENTICATION"
+	ActionPromiseToPay          = "PROMISE_TO_PAY"
+	ActionCorporateInvoice      = "CORPORATE_INVOICE"
 	ActionEscalateHuman         = "ESCALATE_HUMAN"
 	ActionStop                  = "STOP"
 	ActionMarkLost              = "MARK_LOST_EXHAUSTED"
 
 	// Legacy aliases for backward compatibility
-	ActionRetrySameRail     = ActionRetrySameRailCooldown
-	ActionReminderNudge     = ActionRetryAuthentication
-	ActionEscalateToHuman   = ActionEscalateHuman
+	ActionRetrySameRail         = ActionRetrySameRailCooldown
+	ActionReminderNudge         = ActionRetryAuthentication
+	ActionEscalateToHuman       = ActionEscalateHuman
 	ActionIncentiveDiscount5Pct = ActionIncentiveDiscount
 )
 
@@ -37,39 +39,33 @@ type CandidateActionDefinition struct {
 // AllowedCandidatesByCause defines the strict policy-approved candidate set for every root cause
 var AllowedCandidatesByCause = map[string][]string{
 	diagnosis.CauseBankDowntime: {
-		ActionRetrySameRailCooldown,
 		ActionSwitchRailUPI,
-		ActionEscalateHuman,
+		ActionRetrySameRailCooldown,
 	},
 	diagnosis.CauseInsufficientFunds: {
-		ActionRetryLater,
 		ActionRetryNextPaydayWindow,
 		ActionIncentiveDiscount,
-		ActionEscalateHuman,
+		ActionPromiseToPay,
 	},
 	diagnosis.CauseExpiredCard: {
-		ActionCustomerPaymentLink,
 		ActionSwitchRailUPI,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseMandateRevoked: {
 		ActionSwitchRailUPI,
-		ActionIncentiveDiscount,
-		ActionEscalateHuman,
+		ActionCorporateInvoice,
 	},
 	diagnosis.CauseOtpDropoff: {
+		ActionSwitchRailUPI,
 		ActionCustomerPaymentLink,
-		ActionRetryAuthentication,
-		ActionEscalateHuman,
 	},
 	diagnosis.CauseFraudSuspected: {
 		ActionStop,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseNetworkDecline: {
-		ActionRetrySameRailCooldown,
 		ActionSwitchRailUPI,
-		ActionEscalateHuman,
+		ActionRetrySameRailCooldown,
 	},
 	diagnosis.CauseUnknown: {
 		ActionEscalateHuman,
