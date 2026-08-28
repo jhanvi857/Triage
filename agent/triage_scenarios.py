@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Triage — Autonomous Revenue Recovery & Payment Failure Scenarios Runner
-Track 03 Implementation:
+Key Architecture:
   - 1 ML Ranking Model (Random Forest) for Intervention Selection
   - 0 LLMs, 0 Generative AI, 0 AI in diagnosis, 0 AI in financial execution
   - Deterministic Policy Enforcement & Final Veto
@@ -338,7 +338,7 @@ def run_batch_evaluation(count: int = 15):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Triage Track 03 Scenarios Runner")
+    parser = argparse.ArgumentParser(description="Triage Payment Recovery Scenarios Runner")
     parser.add_argument("--scenario", type=int, choices=[1, 2, 3, 4, 5], help="Run specific scenario (1-5)")
     parser.add_argument("--batch", type=int, default=50, help="Run batch evaluation harness with N cases (default: 50)")
     parser.add_argument("--all", action="store_true", help="Run all 5 scenarios and batch benchmark sequentially")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Triage ML Ranking Service — Model Training & Evaluation Pipeline
-Track 03: Machine-Learning Intervention Ranking across Bounded Recovery Actions
+Autonomous Machine-Learning Intervention Ranking across Bounded Recovery Actions
 
 Principle:
   ML ranks bounded recovery choices. Context MUST actually matter.

@@ -1,6 +1,6 @@
 # Triage ML Ranking Service
 
-**Track 03 Component**: Local Tabular Machine-Learning Model for Intervention Selection.
+**Core Machine-Learning Component**: Local Tabular Model for Intervention Selection.
 
 > **No LLM is used anywhere in Triage.**
 

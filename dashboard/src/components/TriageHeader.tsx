@@ -44,7 +44,7 @@ export const TriageHeader: React.FC<TriageHeaderProps> = ({
                   TRIAGE
                 </span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#69D2E7]/25 text-[#147385] border border-[#69D2E7] uppercase tracking-wider">
-                  TRACK 03 REVENUE RECOVERY
+                  AUTONOMOUS REVENUE RECOVERY
                 </span>
                 <div className="flex items-center space-x-1.5 text-xs text-[#506361]">
                   <span className={`w-2 h-2 rounded-full ${isSseConnected ? "bg-[#267571] animate-pulse" : "bg-[#F38630]"}`} />
