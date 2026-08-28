@@ -1,4 +1,4 @@
-# Triage — Autonomous AI Revenue Recovery System
+# Triage - Autonomous AI Revenue Recovery System
 
 > **Triage is an autonomous AI revenue recovery engine for failed subscription and invoice payments. It combines deterministic diagnosis, machine-learned intervention ranking, and strict policy gating to recover at-risk revenue safely, idempotently, and auditably.**
 
@@ -8,10 +8,8 @@
 
 ## 1. The Core Architectural Principle
 
-```text
-ML ranks bounded recovery choices.
+- ML ranks bounded recovery choices.
 Deterministic code diagnoses, authorizes, limits, executes, and audits.
-```
 
 - **Zero LLMs / Zero Generative Copy**: All customer communications use deterministic template substitution (`templates[Cause][Action]`).
 - **Zero AI in Financial Execution**: Every money movement is strictly authorized by deterministic policy rules before execution on Razorpay APIs.
