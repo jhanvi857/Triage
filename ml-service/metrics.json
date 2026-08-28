@@ -1,0 +1,69 @@
+{
+  "model_type": "RandomForestClassifier",
+  "n_estimators": 120,
+  "test_cases_evaluated": 750,
+  "total_revenue_at_risk_inr": 4738600.0,
+  "baseline_recovered_inr": 2472030.0,
+  "ml_recovered_inr": 3083065.0,
+  "baseline_recovery_rate_pct": 54.4,
+  "ml_recovery_rate_pct": 59.87,
+  "absolute_uplift_pct_points": 5.47,
+  "relative_uplift_pct": 24.72,
+  "roc_auc": 0.9884,
+  "precision": 0.9396,
+  "recall": 0.9321,
+  "f1_score": 0.9358,
+  "accuracy": 0.9399,
+  "actions_by_cause": {
+    "BANK_DOWNTIME_TIMEOUT": [
+      "RETRY_SAME_RAIL_COOLDOWN",
+      "SWITCH_RAIL_UPI",
+      "ESCALATE_HUMAN"
+    ],
+    "INSUFFICIENT_FUNDS": [
+      "RETRY_LATER",
+      "RETRY_NEXT_PAYDAY_WINDOW",
+      "INCENTIVE_DISCOUNT",
+      "ESCALATE_HUMAN"
+    ],
+    "EXPIRED_CARD": [
+      "SWITCH_RAIL_UPI",
+      "CUSTOMER_PAYMENT_LINK",
+      "ESCALATE_HUMAN"
+    ],
+    "OTP_DROP_OFF": [
+      "RETRY_AUTHENTICATION",
+      "CUSTOMER_PAYMENT_LINK",
+      "ESCALATE_HUMAN"
+    ],
+    "MANDATE_REVOKED": [
+      "INCENTIVE_DISCOUNT",
+      "SWITCH_RAIL_UPI",
+      "ESCALATE_HUMAN"
+    ],
+    "FRAUD_SUSPECTED": [
+      "ESCALATE_HUMAN",
+      "STOP"
+    ],
+    "NETWORK_DECLINE": [
+      "RETRY_SAME_RAIL_COOLDOWN",
+      "SWITCH_RAIL_UPI",
+      "ESCALATE_HUMAN"
+    ],
+    "UNKNOWN_ERROR": [
+      "ESCALATE_HUMAN",
+      "STOP"
+    ]
+  },
+  "action_selection_counts_ml": {
+    "INCENTIVE_DISCOUNT": 77,
+    "RETRY_LATER": 74,
+    "CUSTOMER_PAYMENT_LINK": 199,
+    "RETRY_NEXT_PAYDAY_WINDOW": 9,
+    "SWITCH_RAIL_UPI": 212,
+    "RETRY_SAME_RAIL_COOLDOWN": 73,
+    "ESCALATE_HUMAN": 74,
+    "STOP": 31,
+    "RETRY_AUTHENTICATION": 1
+  }
+}
