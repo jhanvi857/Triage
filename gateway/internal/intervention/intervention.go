@@ -15,44 +15,58 @@ type PolicyRuleEvaluation struct {
 	Reason   string `json:"reason"`
 }
 
-// Decision contains the selected intervention, ML rankings, and policy engine veto checks
-type Decision struct {
-	CaseID               string                 `json:"case_id"`
-	Action               string                 `json:"action"`
-	Reasoning            string                 `json:"reasoning"`
-	TargetRail           string                 `json:"target_rail,omitempty"`
-	CooldownDuration     time.Duration          `json:"cooldown_duration"`
-	NextExecutionAt      time.Time              `json:"next_execution_at"`
-	IncentiveAmountPaise int64                  `json:"incentive_amount_paise,omitempty"`
-	IncentivePercent     float64                `json:"incentive_percent,omitempty"`
-	IsStoppingRuleHit    bool                   `json:"is_stopping_rule_hit"`
-	StoppingReason       string                 `json:"stopping_reason,omitempty"`
-	PolicyVerdict        string                 `json:"policy_verdict"` // "AUTHORIZED" or "VETOED"
-	PolicyRules          []PolicyRuleEvaluation `json:"policy_rules"`
-	MLRankings           []mlclient.RankedCandidate `json:"ml_rankings,omitempty"`
-	MLRecommendation     string                 `json:"ml_recommendation,omitempty"`
-	MLProbability        float64                `json:"ml_probability,omitempty"`
-	MLExpectedValuePaise int64                  `json:"ml_expected_value_paise,omitempty"`
-	ShadowBandit         *mlclient.ShadowBanditReport `json:"shadow_bandit,omitempty"`
-	MaxAttempts          int                    `json:"max_attempts"`
-	CurrentAttempt       int                    `json:"current_attempt"`
+// ActionDecisionRationale explains exactly why an action was chosen, positive signals, rejected alternatives, and policy gates
+type ActionDecisionRationale struct {
+	RecommendedAction    string   `json:"recommended_action"`
+	ExpectedRecoveryINR  float64  `json:"expected_recovery_inr"`
+	RecoveryProbability  float64  `json:"recovery_probability"`
+	PositiveSignals      []string `json:"positive_signals"`
+	RejectedAlternatives []string `json:"rejected_alternatives"`
+	PolicyPassedChecks   []string `json:"policy_passed_checks"`
 }
 
-// Selector evaluates diagnosis, ML ranking, and case state to pick and authorize bounded interventions
+// Decision contains the selected intervention, ML rankings, candidate provenance, and policy engine veto checks
+type Decision struct {
+	CaseID               string                      `json:"case_id"`
+	Action               string                      `json:"action"`
+	Reasoning            string                      `json:"reasoning"`
+	TargetRail           string                      `json:"target_rail,omitempty"`
+	CooldownDuration     time.Duration               `json:"cooldown_duration"`
+	NextExecutionAt      time.Time                   `json:"next_execution_at"`
+	IncentiveAmountPaise int64                       `json:"incentive_amount_paise,omitempty"`
+	IncentivePercent     float64                     `json:"incentive_percent,omitempty"`
+	IsStoppingRuleHit    bool                        `json:"is_stopping_rule_hit"`
+	StoppingReason       string                      `json:"stopping_reason,omitempty"`
+	PolicyVerdict        string                      `json:"policy_verdict"` // "AUTHORIZED" or "VETOED"
+	PolicyRules          []PolicyRuleEvaluation      `json:"policy_rules"`
+	CandidateEvaluations []CandidateEvaluation       `json:"candidate_evaluations,omitempty"`
+	ActionRationale      *ActionDecisionRationale    `json:"action_rationale,omitempty"`
+	MLRankings           []mlclient.RankedCandidate  `json:"ml_rankings,omitempty"`
+	MLRecommendation     string                      `json:"ml_recommendation,omitempty"`
+	MLProbability        float64                     `json:"ml_probability,omitempty"`
+	MLExpectedValuePaise int64                       `json:"ml_expected_value_paise,omitempty"`
+	ShadowBandit         *mlclient.ShadowBanditReport `json:"shadow_bandit,omitempty"`
+	MaxAttempts          int                         `json:"max_attempts"`
+	CurrentAttempt       int                         `json:"current_attempt"`
+}
+
+// Selector evaluates diagnosis, context-aware eligibility, ML ranking, and policy vetoes
 type Selector struct {
 	MaxAttemptsDefault   int
 	MaxIncentiveCapPaise int64 // ₹500 (50,000 paise)
 	HighValueThreshold   int64 // ₹10,000 (1,000,000 paise)
 	MLClient             *mlclient.Client
+	EligibilityEngine    *EligibilityEngine
 }
 
-// NewSelector creates a new intervention selector with ML client
+// NewSelector creates a new intervention selector with ML client and eligibility engine
 func NewSelector() *Selector {
 	return &Selector{
 		MaxAttemptsDefault:   3,
 		MaxIncentiveCapPaise: 50000,   // ₹500 max concession per case
 		HighValueThreshold:   1000000, // ₹10,000
 		MLClient:             mlclient.NewClient("http://localhost:8000"),
+		EligibilityEngine:    NewEligibilityEngine(),
 	}
 }
 
@@ -61,7 +75,7 @@ func (s *Selector) SetMLClient(client *mlclient.Client) {
 	s.MLClient = client
 }
 
-// SelectIntervention ranks allowed candidate actions via ML and enforces deterministic policy authorization
+// SelectIntervention ranks context-eligible candidate actions via ML and enforces deterministic policy authorization
 func (s *Selector) SelectIntervention(
 	caseID string,
 	report diagnosis.DiagnosticReport,
@@ -74,15 +88,16 @@ func (s *Selector) SelectIntervention(
 	now := time.Now().UTC()
 	nextAttempt := currentAttempts + 1
 
-	// 1. Get explicit bounded candidates for this cause
-	allowedCandidates := GetAllowedCandidates(report.RootCause)
-
 	// Extract contextual features
 	paydayProx := 10
 	timeSinceFailH := 1.0
 	hour := now.Hour()
 	dayOfWeek := int(now.Weekday())
 	histRate := 0.72
+	hasAltCard := false
+	altCardLabel := ""
+	altCardSuccess := 0
+	hasUPI := false
 
 	if len(extraContext) > 0 && extraContext[0] != nil {
 		ctx := extraContext[0]
@@ -101,7 +116,39 @@ func (s *Selector) SelectIntervention(
 		if r, ok := ctx["historical_success_rate"].(float64); ok {
 			histRate = r
 		}
+		if c, ok := ctx["has_alternate_saved_card"].(bool); ok {
+			hasAltCard = c
+		}
+		if l, ok := ctx["alternate_saved_card_label"].(string); ok {
+			altCardLabel = l
+		}
+		if s, ok := ctx["alternate_card_success_count"].(int); ok {
+			altCardSuccess = s
+		}
+		if u, ok := ctx["has_upi_available"].(bool); ok {
+			hasUPI = u
+		}
 	}
+
+	// 1. CONTEXT-AWARE ELIGIBILITY ENGINE EVALUATION (Read-only context check)
+	recCtx := BuildRecoveryContext(
+		caseID,
+		report.RootCause,
+		amountPaise,
+		originalRail,
+		currentAttempts,
+		s.MaxAttemptsDefault,
+		paydayProx,
+		histRate,
+		timeSinceFailH,
+		hasAltCard,
+		altCardLabel,
+		altCardSuccess,
+		hasUPI,
+	)
+
+	candidateEvaluations := s.EligibilityEngine.EvaluateEligibility(recCtx)
+	eligibleCandidates := s.EligibilityEngine.GetEligibleActionNames(recCtx)
 
 	features := mlclient.CaseFeatures{
 		CaseID:                caseID,
@@ -114,12 +161,12 @@ func (s *Selector) SelectIntervention(
 		Hour:                  hour,
 		PaydayProximityDays:   paydayProx,
 		HistoricalSuccessRate: histRate,
-		PreviousSuccessCount:  6,
+		PreviousSuccessCount:  altCardSuccess,
 		DaysSinceLastPayment:  25,
-		CandidateActions:      allowedCandidates,
+		CandidateActions:      eligibleCandidates,
 	}
 
-	// 2. Query ML Service to rank candidate actions by P(recover|x, a) * amount
+	// 2. ML SERVICE / RANDOM FOREST CANDIDATE RANKING
 	rankResp := s.MLClient.RankCandidates(features)
 	mlRankings := rankResp.RankedCandidates
 
@@ -128,7 +175,7 @@ func (s *Selector) SelectIntervention(
 		topCandidate = mlRankings[0]
 	} else {
 		topCandidate = mlclient.RankedCandidate{
-			Action:             allowedCandidates[0],
+			Action:             eligibleCandidates[0],
 			Probability:        0.50,
 			ExpectedValuePaise: amountPaise / 2,
 		}
@@ -141,16 +188,22 @@ func (s *Selector) SelectIntervention(
 	var vetoReason string
 
 	// Rule 1: Permitted Candidate Action Check
-	actionPermitted := IsActionAllowed(report.RootCause, topCandidate.Action)
+	actionPermitted := false
+	for _, cand := range eligibleCandidates {
+		if cand == topCandidate.Action {
+			actionPermitted = true
+			break
+		}
+	}
 	policyRules = append(policyRules, PolicyRuleEvaluation{
 		RuleName: "CANDIDATE_LEGITIMACY",
 		Passed:   actionPermitted,
-		Reason:   fmt.Sprintf("Action '%s' is in pre-approved candidate set for '%s'", topCandidate.Action, report.RootCause),
+		Reason:   fmt.Sprintf("Action '%s' is verified in context-eligible candidate set", topCandidate.Action),
 	})
 	if !actionPermitted {
 		isVetoed = true
 		vetoAction = ActionEscalateHuman
-		vetoReason = fmt.Sprintf("ML proposed non-approved action '%s' for cause '%s'", topCandidate.Action, report.RootCause)
+		vetoReason = fmt.Sprintf("ML proposed non-eligible action '%s' for current context", topCandidate.Action)
 	}
 
 	// Rule 2: Max Attempts Ceiling (Stopping Rule)
@@ -166,7 +219,7 @@ func (s *Selector) SelectIntervention(
 		vetoReason = fmt.Sprintf("Stopping rule triggered: reached max retry attempts (%d/%d). Ceasing automated dunning.", currentAttempts, s.MaxAttemptsDefault)
 	}
 
-	// Rule 3: Fraud Restrictions
+	// Rule 3: Fraud Security Gate
 	fraudPassed := report.RootCause != diagnosis.CauseFraudSuspected
 	policyRules = append(policyRules, PolicyRuleEvaluation{
 		RuleName: "FRAUD_SECURITY_GATE",
@@ -176,7 +229,7 @@ func (s *Selector) SelectIntervention(
 	if !fraudPassed {
 		isVetoed = true
 		vetoAction = ActionEscalateHuman
-		vetoReason = "Security flag triggered: transaction flagged as suspected fraud or velocity anomaly. Directing to risk officer."
+		vetoReason = "Security flag triggered: transaction flagged as suspected fraud. Directing to risk officer."
 	}
 
 	// Rule 4: High-Value Escalation Threshold (₹10,000)
@@ -192,35 +245,54 @@ func (s *Selector) SelectIntervention(
 		vetoReason = fmt.Sprintf("High-value transaction (₹%.2f >= ₹10,000 threshold). Automated recovery vetoed; assigned to Senior Retention Desk.", float64(amountPaise)/100.0)
 	}
 
-	// Rule 5: Concession Cap and Token Budget Check
-	var concessionPaise int64 = 0
-	var concessionPercent float64 = 0.0
-
+	// Rule 5: Concession Budget Cap (≤5% of amount AND ≤₹500)
+	concessionCapPassed := true
+	incentiveAmountPaise := int64(0)
 	if topCandidate.Action == ActionIncentiveDiscount {
-		concessionPaise = int64(float64(amountPaise) * 0.05)
-		if concessionPaise > s.MaxIncentiveCapPaise {
-			concessionPaise = s.MaxIncentiveCapPaise
+		incentiveAmountPaise = int64(float64(amountPaise) * 0.05)
+		if incentiveAmountPaise > s.MaxIncentiveCapPaise {
+			incentiveAmountPaise = s.MaxIncentiveCapPaise
 		}
-		concessionPercent = 5.0
+		concessionCapPassed = incentiveAmountPaise <= s.MaxIncentiveCapPaise
+	}
+	policyRules = append(policyRules, PolicyRuleEvaluation{
+		RuleName: "CONCESSION_BUDGET_CAP",
+		Passed:   concessionCapPassed,
+		Reason:   fmt.Sprintf("Concession ₹%.2f capped at ≤5%% AND ≤₹%.2f", float64(incentiveAmountPaise)/100.0, float64(s.MaxIncentiveCapPaise)/100.0),
+	})
 
-		budgetPassed := concessionPaise <= availableBudgetPaise
-		policyRules = append(policyRules, PolicyRuleEvaluation{
-			RuleName: "CONCESSION_BUDGET_CAP",
-			Passed:   budgetPassed,
-			Reason:   fmt.Sprintf("Concession ₹%.2f (capped at ₹500) vs available budget ₹%.2f", float64(concessionPaise)/100.0, float64(availableBudgetPaise)/100.0),
-		})
+	// Build structured "Why this action?" signals
+	positiveSignals := make([]string, 0)
+	rejectedAlternatives := make([]string, 0)
+	policyPassedList := make([]string, 0)
 
-		if !budgetPassed {
-			isVetoed = true
-			vetoAction = ActionEscalateHuman
-			vetoReason = "Concession token budget depleted. Escalated to retention account manager."
+	for _, pr := range policyRules {
+		if pr.Passed {
+			policyPassedList = append(policyPassedList, pr.Reason)
 		}
-	} else {
-		policyRules = append(policyRules, PolicyRuleEvaluation{
-			RuleName: "CONCESSION_BUDGET_CAP",
-			Passed:   true,
-			Reason:   "Action requires no monetary concession spend",
-		})
+	}
+
+	for _, ev := range candidateEvaluations {
+		if ev.Action == topCandidate.Action {
+			positiveSignals = append(positiveSignals, ev.Signals...)
+		} else if !ev.Eligible {
+			rejectedAlternatives = append(rejectedAlternatives, fmt.Sprintf("%s: %s", ev.DisplayName, ev.Reason))
+		}
+	}
+
+	if len(mlRankings) > 1 {
+		for _, runnerUp := range mlRankings[1:] {
+			rejectedAlternatives = append(rejectedAlternatives, fmt.Sprintf("%s (Ranked lower by ML: %.1f%% EV: ₹%.2f)", runnerUp.Action, runnerUp.ProbabilityPercent, runnerUp.ExpectedValueINR))
+		}
+	}
+
+	actionRationale := &ActionDecisionRationale{
+		RecommendedAction:    topCandidate.Action,
+		ExpectedRecoveryINR:  float64(topCandidate.ExpectedValuePaise) / 100.0,
+		RecoveryProbability:  topCandidate.Probability,
+		PositiveSignals:      positiveSignals,
+		RejectedAlternatives: rejectedAlternatives,
+		PolicyPassedChecks:   policyPassedList,
 	}
 
 	// 4. Construct Decision based on Policy Verdict
@@ -231,6 +303,8 @@ func (s *Selector) SelectIntervention(
 			Reasoning:            vetoReason,
 			PolicyVerdict:        "VETOED",
 			PolicyRules:          policyRules,
+			CandidateEvaluations: candidateEvaluations,
+			ActionRationale:      actionRationale,
 			MLRankings:           mlRankings,
 			MLRecommendation:     topCandidate.Action,
 			MLProbability:        topCandidate.Probability,
@@ -253,27 +327,28 @@ func (s *Selector) SelectIntervention(
 	case ActionRetrySameRailCooldown:
 		cooldown = 4 * time.Hour
 		targetRail = originalRail
-	case ActionRetryLater:
-		cooldown = 24 * time.Hour
-		targetRail = originalRail
 	case ActionRetryNextPaydayWindow:
 		cooldown = 48 * time.Hour
 		targetRail = originalRail
-	case ActionSwitchRailUPI:
+	case ActionSwitchToSavedCard:
+		cooldown = 10 * time.Minute
+		targetRail = "SAVED_CARD"
+	case ActionSwitchToAvailableAlternateRail:
 		cooldown = 15 * time.Minute
 		targetRail = "UPI_INTENT"
-	case ActionCustomerPaymentLink:
-		cooldown = 30 * time.Minute
-		targetRail = "PAYMENT_LINK"
-	case ActionRetryAuthentication:
-		cooldown = 20 * time.Minute
+	case ActionResumeCheckout:
+		cooldown = 15 * time.Minute
 		targetRail = "WHATSAPP_NUDGE"
-	case ActionIncentiveDiscount:
+	case ActionUpdatePaymentMethod:
+		cooldown = 20 * time.Minute
+		targetRail = "HOSTED_CHECKOUT"
+	case ActionReauthorizeMandate:
 		cooldown = 2 * time.Hour
-		targetRail = originalRail
-	case ActionEscalateHuman:
-		cooldown = 0
-	case ActionStop:
+		targetRail = "MANDATE_AUTH"
+	case ActionCollectOutstandingPayment:
+		cooldown = 1 * time.Hour
+		targetRail = "INVOICE"
+	case ActionEscalateHuman, ActionStop:
 		cooldown = 0
 	}
 
@@ -284,10 +359,10 @@ func (s *Selector) SelectIntervention(
 		TargetRail:           targetRail,
 		CooldownDuration:     cooldown,
 		NextExecutionAt:      now.Add(cooldown),
-		IncentiveAmountPaise: concessionPaise,
-		IncentivePercent:     concessionPercent,
 		PolicyVerdict:        "AUTHORIZED",
 		PolicyRules:          policyRules,
+		CandidateEvaluations: candidateEvaluations,
+		ActionRationale:      actionRationale,
 		MLRankings:           mlRankings,
 		MLRecommendation:     topCandidate.Action,
 		MLProbability:        topCandidate.Probability,
@@ -298,3 +373,4 @@ func (s *Selector) SelectIntervention(
 		CurrentAttempt:       nextAttempt,
 	}
 }
+

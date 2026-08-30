@@ -6,23 +6,27 @@ import (
 
 // Bounded recovery action constants
 const (
-	ActionRetrySameRailCooldown = "RETRY_SAME_RAIL_COOLDOWN"
-	ActionSwitchRailUPI         = "SWITCH_RAIL_UPI"
-	ActionRetryLater            = "RETRY_LATER"
-	ActionRetryNextPaydayWindow = "RETRY_NEXT_PAYDAY_WINDOW"
-	ActionIncentiveDiscount     = "INCENTIVE_DISCOUNT"
-	ActionCustomerPaymentLink   = "CUSTOMER_PAYMENT_LINK"
-	ActionRetryAuthentication   = "RETRY_AUTHENTICATION"
-	ActionPromiseToPay          = "PROMISE_TO_PAY"
-	ActionCorporateInvoice      = "CORPORATE_INVOICE"
-	ActionEscalateHuman         = "ESCALATE_HUMAN"
-	ActionStop                  = "STOP"
-	ActionMarkLost              = "MARK_LOST_EXHAUSTED"
+	ActionSwitchToSavedCard               = "SWITCH_TO_SAVED_CARD"
+	ActionRetryNextPaydayWindow           = "RETRY_NEXT_PAYDAY_WINDOW"
+	ActionPromiseToPay                    = "PROMISE_TO_PAY"
+	ActionUpdatePaymentMethod             = "UPDATE_PAYMENT_METHOD"
+	ActionRetrySameRailCooldown           = "RETRY_SAME_RAIL_COOLDOWN"
+	ActionSwitchToAvailableAlternateRail  = "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"
+	ActionResumeCheckout                  = "RESUME_CHECKOUT"
+	ActionReauthorizeMandate              = "REAUTHORIZE_MANDATE"
+	ActionCollectOutstandingPayment       = "COLLECT_OUTSTANDING_PAYMENT"
+	ActionEscalateHuman                   = "ESCALATE_HUMAN"
+	ActionStop                            = "STOP"
+	ActionMarkLost                        = "MARK_LOST_EXHAUSTED"
 
-	// Legacy aliases for backward compatibility
+	// Legacy aliases preserved for backward compatibility in data pipelines
+	ActionRetryLater            = ActionRetrySameRailCooldown
 	ActionRetrySameRail         = ActionRetrySameRailCooldown
-	ActionReminderNudge         = ActionRetryAuthentication
+	ActionRetryAuthentication   = ActionResumeCheckout
+	ActionReminderNudge         = ActionResumeCheckout
 	ActionEscalateToHuman       = ActionEscalateHuman
+	ActionCorporateInvoice      = ActionCollectOutstandingPayment
+	ActionIncentiveDiscount     = "INCENTIVE_DISCOUNT"
 	ActionIncentiveDiscount5Pct = ActionIncentiveDiscount
 )
 
@@ -36,36 +40,41 @@ type CandidateActionDefinition struct {
 	Description      string `json:"description"`
 }
 
-// AllowedCandidatesByCause defines the strict policy-approved candidate set for every root cause
+// AllowedCandidatesByCause defines the standard policy-approved candidate set for fallback
 var AllowedCandidatesByCause = map[string][]string{
 	diagnosis.CauseBankDowntime: {
-		ActionSwitchRailUPI,
 		ActionRetrySameRailCooldown,
+		ActionSwitchToAvailableAlternateRail,
+		ActionEscalateHuman,
 	},
 	diagnosis.CauseInsufficientFunds: {
+		ActionSwitchToSavedCard,
 		ActionRetryNextPaydayWindow,
-		ActionIncentiveDiscount,
 		ActionPromiseToPay,
+		ActionEscalateHuman,
 	},
 	diagnosis.CauseExpiredCard: {
-		ActionSwitchRailUPI,
+		ActionUpdatePaymentMethod,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseMandateRevoked: {
-		ActionSwitchRailUPI,
-		ActionCorporateInvoice,
+		ActionReauthorizeMandate,
+		ActionCollectOutstandingPayment,
+		ActionEscalateHuman,
 	},
 	diagnosis.CauseOtpDropoff: {
-		ActionSwitchRailUPI,
-		ActionCustomerPaymentLink,
+		ActionResumeCheckout,
+		ActionSwitchToAvailableAlternateRail,
+		ActionEscalateHuman,
 	},
 	diagnosis.CauseFraudSuspected: {
 		ActionStop,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseNetworkDecline: {
-		ActionSwitchRailUPI,
 		ActionRetrySameRailCooldown,
+		ActionSwitchToAvailableAlternateRail,
+		ActionEscalateHuman,
 	},
 	diagnosis.CauseUnknown: {
 		ActionEscalateHuman,
@@ -73,7 +82,7 @@ var AllowedCandidatesByCause = map[string][]string{
 	},
 }
 
-// GetAllowedCandidates returns the explicit candidate actions permitted for a root cause
+// GetAllowedCandidates returns the static fallback candidates for a root cause
 func GetAllowedCandidates(cause string) []string {
 	if acts, ok := AllowedCandidatesByCause[cause]; ok {
 		cp := make([]string, len(acts))
@@ -85,6 +94,14 @@ func GetAllowedCandidates(cause string) []string {
 
 // IsActionAllowed checks if a candidate action is legally permitted for a given root cause
 func IsActionAllowed(cause, action string) bool {
+	// Normalize legacy aliases to canonical names
+	switch action {
+	case "RETRY_AUTHENTICATION":
+		action = ActionResumeCheckout
+	case "CORPORATE_INVOICE":
+		action = ActionCollectOutstandingPayment
+	}
+
 	allowed := GetAllowedCandidates(cause)
 	for _, a := range allowed {
 		if a == action {
@@ -93,3 +110,4 @@ func IsActionAllowed(cause, action string) bool {
 	}
 	return false
 }
+

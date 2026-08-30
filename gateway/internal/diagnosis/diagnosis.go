@@ -62,10 +62,10 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 			RootCause:           CauseExpiredCard,
 			ConfidenceScore:     1.0,
 			TechnicalReason:     "Payment card validity date expired. Hard decline on same rail.",
-			CustomerFacingMsg:   "Your card ending in this instrument has expired. Please switch to UPI or update card.",
+			CustomerFacingMsg:   "Your card ending in this instrument has expired. Please update your payment method.",
 			IsRecoverable:       true,
 			RequiresHumanReview: false,
-			RecommendedAction:   "SWITCH_RAIL_UPI",
+			RecommendedAction:   "UPDATE_PAYMENT_METHOD",
 			DiagnosedAt:         now,
 		}
 	}
@@ -119,10 +119,10 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 			RootCause:           CauseMandateRevoked,
 			ConfidenceScore:     0.99,
 			TechnicalReason:     "Recurring e-mandate limit breached or authorization revoked at destination bank.",
-			CustomerFacingMsg:   "Recurring autopay authorization was interrupted. Complete payment securely via 1-Click UPI.",
+			CustomerFacingMsg:   "Recurring autopay authorization was interrupted. Please re-authorize autopay mandate.",
 			IsRecoverable:       true,
 			RequiresHumanReview: false,
-			RecommendedAction:   "SWITCH_RAIL_UPI",
+			RecommendedAction:   "REAUTHORIZE_MANDATE",
 			DiagnosedAt:         now,
 		}
 	}
@@ -136,10 +136,10 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 			RootCause:           CauseOtpDropoff,
 			ConfidenceScore:     0.94,
 			TechnicalReason:     "Customer abandoned 3D-Secure authentication window without entering OTP.",
-			CustomerFacingMsg:   "Payment authentication was interrupted. Use this 1-click link to complete securely.",
+			CustomerFacingMsg:   "Payment authentication was interrupted. Resume checkout with 1-click.",
 			IsRecoverable:       true,
 			RequiresHumanReview: false,
-			RecommendedAction:   "RETRY_AUTHENTICATION",
+			RecommendedAction:   "RESUME_CHECKOUT",
 			DiagnosedAt:         now,
 		}
 	}
