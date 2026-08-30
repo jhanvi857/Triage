@@ -9,6 +9,7 @@ import (
 
 	"github.com/ledger/gateway/internal/diagnosis"
 	"github.com/ledger/gateway/internal/intervention"
+	"github.com/ledger/gateway/internal/messaging"
 	"github.com/ledger/gateway/internal/ptp"
 )
 
@@ -22,42 +23,59 @@ const (
 	StatusEscalated   = "ESCALATED"
 )
 
-// Case represents a failed payment/subscription case undergoing triage
+// Case represents a revenue-at-risk opportunity undergoing triage recovery
 type Case struct {
-	ID                     string                      `json:"id"`
-	CustomerID             string                      `json:"customer_id"`
-	CustomerName           string                      `json:"customer_name"`
-	CustomerEmail          string                      `json:"customer_email"`
-	PlanName               string                      `json:"plan_name"`
-	AmountPaise            int64                       `json:"amount_paise"`
-	AmountINR              float64                     `json:"amount_inr"`
-	Currency               string                      `json:"currency"`
-	OriginalRail           string                      `json:"original_rail"`
-	ErrorCode              string                      `json:"error_code"`
-	ErrorDesc              string                      `json:"error_desc"`
-	ErrorReason            string                      `json:"error_reason,omitempty"`
-	ErrorSource            string                      `json:"error_source,omitempty"`
-	ErrorStep              string                      `json:"error_step,omitempty"`
-	Status                 string                      `json:"status"`
-	Source                 string                      `json:"source"` // "LIVE" or "SYNTHETIC"
-	AllowedActions         []string                    `json:"allowed_actions,omitempty"`
-	Diagnosis              *diagnosis.DiagnosticReport `json:"diagnosis,omitempty"`
-	Intervention           *intervention.Decision      `json:"intervention,omitempty"`
-	PTPStatus              *ptp.ParseResult            `json:"ptp_status,omitempty"`
-	IsSimulated            bool                        `json:"is_simulated,omitempty"`
-	CustomerFacingMsg      string                      `json:"customer_facing_msg,omitempty"`
-	PaydayProximityDays    int                         `json:"payday_proximity_days,omitempty"`
-	HistoricalSuccessRate  float64                     `json:"historical_success_rate,omitempty"`
-	AttemptsMade           int                         `json:"attempts_made"`
-	MaxAttempts            int                         `json:"max_attempts"`
-	NextRetryAt            *time.Time                  `json:"next_retry_at,omitempty"`
-	RecoveredAmountPaise   int64                       `json:"recovered_amount_paise"`
-	IncentiveDiscountPaise int64                       `json:"incentive_discount_paise"`
-	RazorpayPaymentID      string                      `json:"razorpay_payment_id,omitempty"`
-	IdempotencyKey         string                      `json:"idempotency_key"`
-	Notes                  string                      `json:"notes,omitempty"`
-	CreatedAt              time.Time                   `json:"created_at"`
-	UpdatedAt              time.Time                   `json:"updated_at"`
+	ID                        string                             `json:"id"`
+	CustomerID                string                             `json:"customer_id"`
+	CustomerName              string                             `json:"customer_name"`
+	CustomerEmail             string                             `json:"customer_email"`
+	MerchantID                string                             `json:"merchant_id,omitempty"`
+	PlanName                  string                             `json:"plan_name"`
+	SourceType                string                             `json:"source_type"` // FAILED_PAYMENT, ABANDONED_CHECKOUT, FAILED_SUBSCRIPTION, OVERDUE_INVOICE, MANDATE_FAILURE, PROMISE_TO_PAY
+	AmountPaise               int64                              `json:"amount_paise"`
+	AmountINR                 float64                            `json:"amount_inr"`
+	Currency                  string                             `json:"currency"`
+	OriginalRail              string                             `json:"original_rail"`
+	ErrorCode                 string                             `json:"error_code"`
+	ErrorDesc                 string                             `json:"error_desc"`
+	ErrorReason               string                             `json:"error_reason,omitempty"`
+	ErrorSource               string                             `json:"error_source,omitempty"`
+	ErrorStep                 string                             `json:"error_step,omitempty"`
+	Status                    string                             `json:"status"`
+	Source                    string                             `json:"source"` // "LIVE" or "SYNTHETIC"
+	AllowedActions            []string                           `json:"allowed_actions,omitempty"`
+	AvailableInstruments       []intervention.PaymentInstrument   `json:"available_instruments,omitempty"`
+	HasAlternateSavedCard      bool                               `json:"has_alternate_saved_card,omitempty"`
+	AlternateSavedCardLabel    string                             `json:"alternate_saved_card_label,omitempty"`
+	AlternateCardSuccessCount int                                `json:"alternate_card_success_count,omitempty"`
+	HasUPIAvailable            bool                               `json:"has_upi_available,omitempty"`
+	CanUpdatePaymentMethod     bool                               `json:"can_update_payment_method,omitempty"`
+	CandidateEvaluations       []intervention.CandidateEvaluation `json:"candidate_evaluations,omitempty"`
+	ActionRationale           *intervention.ActionDecisionRationale `json:"action_rationale,omitempty"`
+	Diagnosis                 *diagnosis.DiagnosticReport        `json:"diagnosis,omitempty"`
+	Intervention              *intervention.Decision             `json:"intervention,omitempty"`
+	PTPStatus                 *ptp.ParseResult                   `json:"ptp_status,omitempty"`
+	RecoveryPlan              *RecoveryPlan                      `json:"recovery_plan,omitempty"`
+	PriorityScore             float64                            `json:"priority_score,omitempty"`
+	ExpectedRecoveryPaise     int64                              `json:"expected_recovery_paise,omitempty"`
+	IsSimulated               bool                               `json:"is_simulated,omitempty"`
+	CustomerFacingMsg         string                             `json:"customer_facing_msg,omitempty"`
+	CustomerNudgeDraft        *messaging.CustomerNudgeDraft      `json:"customer_nudge_draft,omitempty"`
+	PaydayProximityDays       int                                `json:"payday_proximity_days,omitempty"`
+	HistoricalAttempts        int                                `json:"historical_attempts,omitempty"`
+	HistoricalSuccessRate     float64                            `json:"historical_success_rate,omitempty"`
+	AttemptsMade              int                                `json:"attempts_made"`
+	MaxAttempts               int                                `json:"max_attempts"`
+	NextRetryAt               *time.Time                         `json:"next_retry_at,omitempty"`
+	RecoveredAmountPaise      int64                              `json:"recovered_amount_paise"`
+	IncentiveDiscountPaise    int64                              `json:"incentive_discount_paise"`
+	RazorpayPaymentID         string                             `json:"razorpay_payment_id,omitempty"`
+	IdempotencyKey            string                             `json:"idempotency_key"`
+	Notes                     string                             `json:"notes,omitempty"`
+	DueAt                     *time.Time                         `json:"due_at,omitempty"`
+	TimeSensitivity           float64                            `json:"time_sensitivity,omitempty"`
+	CreatedAt                 time.Time                          `json:"created_at"`
+	UpdatedAt                 time.Time                          `json:"updated_at"`
 }
 
 // LogEntry is an immutable, hash-chained record in the Triage Recovery Ledger
@@ -109,12 +127,17 @@ func (m *Manager) seedDefaultCases() {
 			CustomerName:   "Acme Cloud Systems",
 			CustomerEmail:  "billing@acmecloud.io",
 			PlanName:       "Enterprise GPU Cluster (Monthly)",
+			SourceType:     SourceFailedPayment,
 			AmountPaise:    480000, // ₹4,800.00
 			AmountINR:      4800.00,
 			Currency:       "INR",
 			OriginalRail:   "CARD",
 			ErrorCode:      "GATEWAY_TIMEOUT_504",
 			ErrorDesc:      "HDFC core banking timeout during settlement",
+			HasUPIAvailable: true,
+			AvailableInstruments: []intervention.PaymentInstrument{
+				{ID: "inst_upi_01", Type: "UPI", UPIHandle: "acme@okhdfcbank", IsActive: true, Label: "UPI (acme@okhdfcbank)"},
+			},
 			Status:         StatusNew,
 			AttemptsMade:   0,
 			MaxAttempts:    3,
@@ -128,12 +151,14 @@ func (m *Manager) seedDefaultCases() {
 			CustomerName:   "Vikram Sharma (Freelancer)",
 			CustomerEmail:  "vikram.sharma@gmail.com",
 			PlanName:       "AI Inference Credits Pack (10M Tokens)",
+			SourceType:     SourceFailedPayment,
 			AmountPaise:    180000, // ₹1,800.00
 			AmountINR:      1800.00,
 			Currency:       "INR",
 			OriginalRail:   "UPI",
 			ErrorCode:      "3DS_DROP_OFF",
 			ErrorDesc:      "Customer closed UPI intent screen without approving pin",
+			CanUpdatePaymentMethod: true,
 			Status:         StatusNew,
 			AttemptsMade:   0,
 			MaxAttempts:    3,
@@ -142,17 +167,26 @@ func (m *Manager) seedDefaultCases() {
 			UpdatedAt:      now.Add(-10 * time.Minute),
 		},
 		{
-			ID:             "CASE-7231",
-			CustomerID:     "cust_saas_03",
-			CustomerName:   "Nexus Analytics Corp",
-			CustomerEmail:  "finance@nexusanalytics.dev",
-			PlanName:       "Dedicated Managed Postgres Cluster",
-			AmountPaise:    420000, // ₹4,200.00
-			AmountINR:      4200.00,
-			Currency:       "INR",
-			OriginalRail:   "CARD",
-			ErrorCode:      "INSUFFICIENT_FUNDS",
-			ErrorDesc:      "Soft decline: corporate account balance below limit",
+			ID:                      "CASE-7231",
+			CustomerID:              "cust_saas_03",
+			CustomerName:            "Nexus Analytics Corp",
+			CustomerEmail:           "finance@nexusanalytics.dev",
+			PlanName:                "Dedicated Managed Postgres Cluster",
+			SourceType:              SourceFailedPayment,
+			AmountPaise:             420000, // ₹4,200.00
+			AmountINR:               4200.00,
+			Currency:                "INR",
+			OriginalRail:            "CARD",
+			ErrorCode:               "INSUFFICIENT_FUNDS",
+			ErrorDesc:               "Soft decline: corporate account balance below limit",
+			PaydayProximityDays:     18,
+			HistoricalSuccessRate:   0.88,
+			HasAlternateSavedCard:   true,
+			AlternateSavedCardLabel: "Visa •••• 4821",
+			AlternateCardSuccessCount: 4,
+			AvailableInstruments: []intervention.PaymentInstrument{
+				{ID: "inst_card_alt_01", Type: "CARD", Brand: "Visa", Last4: "4821", IsActive: true, PastTxCount: 4, SuccessRate: 0.92, Label: "Visa •••• 4821"},
+			},
 			Status:         StatusNew,
 			AttemptsMade:   0,
 			MaxAttempts:    3,
@@ -166,12 +200,14 @@ func (m *Manager) seedDefaultCases() {
 			CustomerName:   "HyperScale Logistics Ltd",
 			CustomerEmail:  "ops@hyperscalelogistics.in",
 			PlanName:       "Multi-Agent Compliance License (Annual)",
+			SourceType:     SourceMandateFailure,
 			AmountPaise:    1250000, // ₹12,500.00
 			AmountINR:      12500.00,
 			Currency:       "INR",
 			OriginalRail:   "NACH_MANDATE",
 			ErrorCode:      "MANDATE_REVOKED",
 			ErrorDesc:      "Recurring autopay authorization revoked at destination bank",
+			CanUpdatePaymentMethod: true,
 			Status:         StatusNew,
 			AttemptsMade:   0,
 			MaxAttempts:    3,
@@ -180,23 +216,25 @@ func (m *Manager) seedDefaultCases() {
 			UpdatedAt:      now.Add(-50 * time.Minute),
 		},
 		{
-			ID:             "CASE-5028",
-			CustomerID:     "cust_ai_05",
-			CustomerName:   "NeuralForge Labs",
-			CustomerEmail:  "founder@neuralforge.ai",
-			PlanName:       "H100 On-Demand GPU Training Node",
-			AmountPaise:    360000, // ₹3,600.00
-			AmountINR:      3600.00,
-			Currency:       "INR",
-			OriginalRail:   "CARD",
-			ErrorCode:      "CARD_EXPIRED",
-			ErrorDesc:      "Visa card expired 07/26",
-			Status:         StatusNew,
-			AttemptsMade:   0,
-			MaxAttempts:    3,
-			IdempotencyKey: "idem_case_5028",
-			CreatedAt:      now.Add(-60 * time.Minute),
-			UpdatedAt:      now.Add(-60 * time.Minute),
+			ID:                     "CASE-5028",
+			CustomerID:             "cust_ai_05",
+			CustomerName:           "NeuralForge Labs",
+			CustomerEmail:          "founder@neuralforge.ai",
+			PlanName:               "H100 On-Demand GPU Training Node",
+			SourceType:             SourceFailedPayment,
+			AmountPaise:            360000, // ₹3,600.00
+			AmountINR:              3600.00,
+			Currency:               "INR",
+			OriginalRail:           "CARD",
+			ErrorCode:              "CARD_EXPIRED",
+			ErrorDesc:              "Visa card expired 07/26",
+			CanUpdatePaymentMethod: true,
+			Status:                 StatusNew,
+			AttemptsMade:           0,
+			MaxAttempts:            3,
+			IdempotencyKey:         "idem_case_5028",
+			CreatedAt:              now.Add(-60 * time.Minute),
+			UpdatedAt:              now.Add(-60 * time.Minute),
 		},
 		{
 			ID:             "CASE-3091",
@@ -204,6 +242,7 @@ func (m *Manager) seedDefaultCases() {
 			CustomerName:   "Vertex Dynamics Ltd",
 			CustomerEmail:  "billing@vertexdynamics.com",
 			PlanName:       "Vector Database Pro Cluster",
+			SourceType:     SourceFailedPayment,
 			AmountPaise:    350000, // ₹3,500.00
 			AmountINR:      3500.00,
 			Currency:       "INR",
@@ -217,6 +256,70 @@ func (m *Manager) seedDefaultCases() {
 			CreatedAt:      now.Add(-75 * time.Minute),
 			UpdatedAt:      now.Add(-75 * time.Minute),
 		},
+		// Multi-surface cases: same customer (Acme Corp) with 3 revenue-risk sources
+		{
+			ID:             "CASE-2001",
+			CustomerID:     "cust_acme_multi",
+			CustomerName:   "Acme Corp",
+			CustomerEmail:  "billing@acmecorp.com",
+			PlanName:       "Pro Subscription (Monthly)",
+			SourceType:     SourceFailedSubscription,
+			AmountPaise:    420000, // ₹4,200.00
+			AmountINR:      4200.00,
+			Currency:       "INR",
+			OriginalRail:   "CARD",
+			ErrorCode:      "INSUFFICIENT_FUNDS",
+			ErrorDesc:      "Subscription renewal declined",
+			PaydayProximityDays: 5,
+			HistoricalSuccessRate: 0.82,
+			Status:         StatusNew,
+			AttemptsMade:   0,
+			MaxAttempts:    3,
+			IdempotencyKey: "idem_case_2001",
+			CreatedAt:      now.Add(-30 * time.Minute),
+			UpdatedAt:      now.Add(-30 * time.Minute),
+		},
+		{
+			ID:             "CASE-2002",
+			CustomerID:     "cust_acme_multi",
+			CustomerName:   "Acme Corp",
+			CustomerEmail:  "billing@acmecorp.com",
+			PlanName:       "Enterprise Dashboard Add-on",
+			SourceType:     SourceAbandonedCheckout,
+			AmountPaise:    1800000, // ₹18,000.00
+			AmountINR:      18000.00,
+			Currency:       "INR",
+			OriginalRail:   "UPI",
+			ErrorCode:      "3DS_DROP_OFF",
+			ErrorDesc:      "Customer closed checkout without completing payment",
+			Status:         StatusNew,
+			AttemptsMade:   0,
+			MaxAttempts:    3,
+			IdempotencyKey: "idem_case_2002",
+			CreatedAt:      now.Add(-20 * time.Minute),
+			UpdatedAt:      now.Add(-20 * time.Minute),
+		},
+		{
+			ID:             "CASE-2003",
+			CustomerID:     "cust_acme_multi",
+			CustomerName:   "Acme Corp",
+			CustomerEmail:  "billing@acmecorp.com",
+			PlanName:       "Annual Infrastructure License",
+			SourceType:     SourceOverdueInvoice,
+			AmountPaise:    7500000, // ₹75,000.00
+			AmountINR:      75000.00,
+			Currency:       "INR",
+			OriginalRail:   "NACH_MANDATE",
+			ErrorCode:      "MANDATE_REVOKED",
+			ErrorDesc:      "Invoice payment mandate expired",
+			CanUpdatePaymentMethod: true,
+			Status:         StatusNew,
+			AttemptsMade:   0,
+			MaxAttempts:    3,
+			IdempotencyKey: "idem_case_2003",
+			CreatedAt:      now.Add(-48 * time.Hour),
+			UpdatedAt:      now.Add(-48 * time.Hour),
+		},
 	}
 
 	for _, c := range cases {
@@ -227,27 +330,29 @@ func (m *Manager) seedDefaultCases() {
 }
 
 func (m *Manager) ensureAllowedActions(c *Case) {
-	if len(c.AllowedActions) == 0 {
-		if c.Diagnosis != nil && c.Diagnosis.RootCause != "" {
-			c.AllowedActions = intervention.GetAllowedCandidates(c.Diagnosis.RootCause)
-		} else {
-			switch c.ErrorCode {
-			case "GATEWAY_TIMEOUT_504", "BANK_TECHNICAL_ERROR":
-				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseBankDowntime)
-			case "INSUFFICIENT_FUNDS", "BALANCE_INSUFFICIENT":
-				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseInsufficientFunds)
-			case "3DS_DROP_OFF", "OTP_EXPIRED":
-				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseOtpDropoff)
-			case "MANDATE_MAX_LIMIT_EXCEEDED", "MANDATE_REVOKED":
-				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseMandateRevoked)
-			case "CARD_EXPIRED":
-				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseExpiredCard)
-			default:
-				c.AllowedActions = intervention.GetAllowedCandidates(diagnosis.CauseBankDowntime)
-			}
-		}
+	recCtx := intervention.BuildRecoveryContext(
+		c.ID,
+		c.ErrorCode,
+		c.AmountPaise,
+		c.OriginalRail,
+		c.AttemptsMade,
+		c.MaxAttempts,
+		c.PaydayProximityDays,
+		c.HistoricalSuccessRate,
+		1.0,
+		c.HasAlternateSavedCard,
+		c.AlternateSavedCardLabel,
+		c.AlternateCardSuccessCount,
+		c.HasUPIAvailable,
+	)
+	if c.Diagnosis != nil && c.Diagnosis.RootCause != "" {
+		recCtx.RootCause = c.Diagnosis.RootCause
 	}
+
+	c.CandidateEvaluations = intervention.DefaultEligibilityEngine.EvaluateEligibility(recCtx)
+	c.AllowedActions = intervention.DefaultEligibilityEngine.GetEligibleActionNames(recCtx)
 }
+
 
 // GetCase fetches a case by ID
 func (m *Manager) GetCase(caseID string) (*Case, bool) {
@@ -389,16 +494,21 @@ func (m *Manager) Unsubscribe(ch chan LogEntry) {
 
 // GetStats returns header summary metrics in plain numbers
 type SummaryStats struct {
-	TotalAtRiskPaise     int64   `json:"total_at_risk_paise"`
-	TotalAtRiskINR       float64 `json:"total_at_risk_inr"`
-	TotalRecoveredPaise  int64   `json:"total_recovered_paise"`
-	TotalRecoveredINR    float64 `json:"total_recovered_inr"`
-	RecoveryRatePercent  float64 `json:"recovery_rate_percent"`
-	UnresolvedExceptions int     `json:"unresolved_exceptions"`
-	TotalCases           int     `json:"total_cases"`
-	ActiveInterventions  int     `json:"active_interventions"`
-	ChainVerified        bool    `json:"chain_verified"`
-	TotalBlocks          int     `json:"total_blocks"`
+	TotalAtRiskPaise         int64   `json:"total_at_risk_paise"`
+	TotalAtRiskINR           float64 `json:"total_at_risk_inr"`
+	TotalRecoveredPaise      int64   `json:"total_recovered_paise"`
+	TotalRecoveredINR        float64 `json:"total_recovered_inr"`
+	RecoveryRatePercent      float64 `json:"recovery_rate_percent"`
+	UnresolvedExceptions     int     `json:"unresolved_exceptions"`
+	TotalCases               int     `json:"total_cases"`
+	ActiveInterventions      int     `json:"active_interventions"`
+	AutomatedRecoveries      int     `json:"automated_recoveries"`
+	HumanEscalations         int     `json:"human_escalations"`
+	SafetyStops              int     `json:"safety_stops"`
+	CustomerCooldowns        int     `json:"customer_cooldowns"`
+	PTPOutstanding           int     `json:"ptp_outstanding"`
+	ChainVerified            bool    `json:"chain_verified"`
+	TotalBlocks              int     `json:"total_blocks"`
 }
 
 func (m *Manager) GetStats() SummaryStats {
@@ -406,16 +516,27 @@ func (m *Manager) GetStats() SummaryStats {
 	defer m.mu.RUnlock()
 
 	var atRiskPaise, recoveredPaise int64
-	var unresolved, activeCount int
+	var unresolved, activeCount, recoveredCount, escalatedCount, stoppedCount, ptpCount int
 
 	for _, c := range m.cases {
 		atRiskPaise += c.AmountPaise
-		if c.Status == StatusRecovered {
+		switch c.Status {
+		case StatusRecovered:
 			recoveredPaise += c.RecoveredAmountPaise
-		} else if c.Status == StatusLost || c.Status == StatusEscalated {
+			recoveredCount++
+		case StatusLost:
 			unresolved++
-		} else if c.Status == StatusIntervening {
+		case StatusEscalated:
+			escalatedCount++
+			unresolved++
+		case StatusIntervening:
 			activeCount++
+		}
+		if c.PTPStatus != nil && c.PTPStatus.PromiseDetected {
+			ptpCount++
+		}
+		if c.Diagnosis != nil && c.Diagnosis.RootCause == "FRAUD_SUSPECTED" {
+			stoppedCount++
 		}
 	}
 
@@ -433,6 +554,10 @@ func (m *Manager) GetStats() SummaryStats {
 		UnresolvedExceptions: unresolved,
 		TotalCases:           len(m.cases),
 		ActiveInterventions:  activeCount,
+		AutomatedRecoveries:  recoveredCount,
+		HumanEscalations:     escalatedCount,
+		SafetyStops:          stoppedCount,
+		PTPOutstanding:       ptpCount,
 		ChainVerified:        true,
 		TotalBlocks:          len(m.log),
 	}

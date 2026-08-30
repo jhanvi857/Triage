@@ -134,10 +134,10 @@ func (pa *PortfolioAllocator) OptimizePortfolio(
 		} else if cause == "MANDATE_REVOKED" {
 			pDiscount = 0.65
 			pNoDiscount = 0.40
-			zeroCostAct = "SWITCH_RAIL_UPI"
+			zeroCostAct = "REAUTHORIZE_MANDATE"
 			pZeroCost = 0.40
 		} else if cause == "EXPIRED_CARD" {
-			zeroCostAct = "SWITCH_RAIL_UPI"
+			zeroCostAct = "UPDATE_PAYMENT_METHOD"
 			pZeroCost = 0.72
 			pNoDiscount = 0.72
 		} else if cause == "BANK_DOWNTIME_TIMEOUT" {
@@ -145,7 +145,7 @@ func (pa *PortfolioAllocator) OptimizePortfolio(
 			pZeroCost = 0.80
 			pNoDiscount = 0.80
 		} else {
-			zeroCostAct = "CUSTOMER_PAYMENT_LINK"
+			zeroCostAct = "RESUME_CHECKOUT"
 			pZeroCost = 0.60
 			pNoDiscount = 0.60
 		}
