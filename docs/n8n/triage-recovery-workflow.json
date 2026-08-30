@@ -1,0 +1,300 @@
+{
+  "name": "Triage Autonomous Revenue Recovery Orchestration Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "razorpay-payment-failed",
+        "options": {}
+      },
+      "name": "Razorpay Payment Decline Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "node-webhook-1"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8080/api/v1/webhooks/razorpay",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Ingest to Triage Gateway",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ],
+      "id": "node-http-gateway-1"
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:8080/api/v1/triage/cases/{{ $json.id }}/advance",
+        "method": "POST",
+        "options": {}
+      },
+      "name": "Execute Deterministic Diagnosis & ML Ranking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        680,
+        300
+      ],
+      "id": "node-http-advance-1"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.intervention.action }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "RETRY_SAME_RAIL_COOLDOWN"
+            },
+            {
+              "value2": "SWITCH_RAIL_UPI"
+            },
+            {
+              "value2": "CUSTOMER_PAYMENT_LINK"
+            },
+            {
+              "value2": "RETRY_AUTHENTICATION"
+            },
+            {
+              "value2": "INCENTIVE_DISCOUNT"
+            },
+            {
+              "value2": "ESCALATE_HUMAN"
+            }
+          ]
+        }
+      },
+      "name": "Action Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        920,
+        300
+      ],
+      "id": "node-switch-1"
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "hours"
+      },
+      "name": "Cooldown Wait (4 Hours)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        100
+      ],
+      "id": "node-wait-cooldown"
+    },
+    {
+      "parameters": {
+        "url": "https://api.interakt.ai/v1/public/message/",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"countryCode\": \"+91\",\n  \"phoneNumber\": \"{{ $json.customer_phone || '9876543210' }}\",\n  \"type\": \"Template\",\n  \"template\": {\n    \"name\": \"triage_payment_retry_nudge\",\n    \"languageCode\": \"en\",\n    \"bodyValues\": [\"{{ $json.customer_name }}\", \"₹{{ $json.amount_inr }}\", \"{{ $json.customer_facing_msg }}\"]\n  }\n}",
+        "options": {}
+      },
+      "name": "WhatsApp 1-Click Nudge Dispatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1180,
+        220
+      ],
+      "id": "node-whatsapp-nudge"
+    },
+    {
+      "parameters": {
+        "fromEmail": "billing@merchant.com",
+        "toEmail": "={{ $json.customer_email }}",
+        "subject": "=Action Required: Invoice Payment for {{ $json.plan_name }}",
+        "text": "={{ $json.customer_facing_msg }}\n\nPay securely here: https://rzp.io/i/{{ $json.id }}"
+      },
+      "name": "Payment Link Email Dispatch",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        340
+      ],
+      "id": "node-email-link"
+    },
+    {
+      "parameters": {
+        "url": "https://hooks.slack.com/services/T00/B00/XXXX",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 *High-Value/Risk Triage Escalation*\\n*Case ID:* {{ $json.id }}\\n*Customer:* {{ $json.customer_name }} ({{ $json.customer_email }})\\n*Amount:* ₹{{ $json.amount_inr }}\\n*Reason:* {{ $json.intervention.stopping_reason }}\\n*Action:* Senior Human Retention Review required\"\n}",
+        "options": {}
+      },
+      "name": "Slack Human Retention Desk Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1180,
+        460
+      ],
+      "id": "node-slack-human"
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:8080/api/v1/triage/cases/{{ $json.id }}/advance",
+        "method": "POST",
+        "options": {}
+      },
+      "name": "Execute Razorpay Capture & Ledger Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1440,
+        300
+      ],
+      "id": "node-http-capture"
+    }
+  ],
+  "connections": {
+    "Razorpay Payment Decline Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ingest to Triage Gateway",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest to Triage Gateway": {
+      "main": [
+        [
+          {
+            "node": "Execute Deterministic Diagnosis & ML Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Deterministic Diagnosis & ML Ranking": {
+      "main": [
+        [
+          {
+            "node": "Action Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Router": {
+      "main": [
+        [
+          {
+            "node": "Cooldown Wait (4 Hours)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WhatsApp 1-Click Nudge Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Payment Link Email Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WhatsApp 1-Click Nudge Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Payment Link Email Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Human Retention Desk Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cooldown Wait (4 Hours)": {
+      "main": [
+        [
+          {
+            "node": "Execute Razorpay Capture & Ledger Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp 1-Click Nudge Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Execute Razorpay Capture & Ledger Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payment Link Email Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Execute Razorpay Capture & Ledger Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Human Retention Desk Alert": {
+      "main": [
+        [
+          {
+            "node": "Execute Razorpay Capture & Ledger Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "triage-n8n-v1.0"
+}

@@ -341,6 +341,11 @@ def main():
     parser = argparse.ArgumentParser(description="Triage Payment Recovery Scenarios Runner")
     parser.add_argument("--scenario", type=int, choices=[1, 2, 3, 4, 5], help="Run specific scenario (1-5)")
     parser.add_argument("--batch", type=int, default=50, help="Run batch evaluation harness with N cases (default: 50)")
+    parser.add_argument("--benchmark", action="store_true", help="Run 3-Model Benchmark (RF vs XGB vs LightGBM)")
+    parser.add_argument("--retrain", action="store_true", help="Run Continuous Retraining Feedback Loop")
+    parser.add_argument("--allocate", action="store_true", help="Run Portfolio Knapsack Allocator")
+    parser.add_argument("--forecast", action="store_true", help="Run 7-Day Revenue Forecast")
+    parser.add_argument("--bandit", action="store_true", help="Run Shadow Contextual Bandit Exploration")
     parser.add_argument("--all", action="store_true", help="Run all 5 scenarios and batch benchmark sequentially")
     args = parser.parse_args()
 
@@ -351,6 +356,21 @@ def main():
         sys.exit(1)
 
     print(f"Connected to {health.get('service', 'Triage Gateway')} (Chain Verified: {health.get('chain_integrity', True)})")
+
+    # Delegate to advanced demos if requested
+    if args.benchmark or args.retrain or args.allocate or args.forecast or args.bandit:
+        import advanced_demos
+        if args.benchmark:
+            advanced_demos.demo_3_model_benchmark()
+        if args.retrain:
+            advanced_demos.demo_retraining_loop()
+        if args.allocate:
+            advanced_demos.demo_portfolio_allocator()
+        if args.forecast:
+            advanced_demos.demo_revenue_forecast()
+        if args.bandit:
+            advanced_demos.demo_shadow_bandit()
+        return
 
     if args.all or (len(sys.argv) == 1 and not args.scenario and args.batch == 50):
         scenario_1_payday_near()
@@ -384,3 +404,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
