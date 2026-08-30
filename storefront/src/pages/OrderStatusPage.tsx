@@ -17,7 +17,8 @@ import {
   FileText,
   Send,
   UserCheck,
-  AlertOctagon
+  AlertOctagon,
+  CreditCard
 } from 'lucide-react';
 
 interface TriageCase {
@@ -63,7 +64,7 @@ interface TriageCase {
   created_at: string;
 }
 
-type RecoveryTab = 'UPI' | 'RETRY' | 'DISCOUNT' | 'PTP' | 'LINK' | 'INVOICE' | 'ESCALATE';
+type RecoveryTab = 'UPI' | 'RETRY' | 'DISCOUNT' | 'PTP' | 'LINK' | 'INVOICE' | 'ESCALATE' | 'CARD_ALT' | 'UPDATE_CARD';
 
 interface TabDefinition {
   key: RecoveryTab;
@@ -113,7 +114,8 @@ export const OrderStatusPage: React.FC = () => {
       } else if (email) {
         const res = await fetch('http://localhost:8080/api/v1/triage/cases');
         if (res.ok) {
-          const cases: TriageCase[] = await res.json();
+          const data = await res.json();
+          const cases: TriageCase[] = Array.isArray(data) ? data : (data.cases || []);
           if (cases && cases.length > 0) {
             setCaseData(cases[0]);
             setLoading(false);
@@ -143,32 +145,56 @@ export const OrderStatusPage: React.FC = () => {
       : (() => {
           switch (rootCause) {
             case 'INSUFFICIENT_FUNDS':
-              return ['RETRY_NEXT_PAYDAY_WINDOW', 'INCENTIVE_DISCOUNT', 'PROMISE_TO_PAY'];
+              return ['SWITCH_TO_SAVED_CARD', 'RETRY_NEXT_PAYDAY_WINDOW', 'PROMISE_TO_PAY'];
             case 'BANK_DOWNTIME_TIMEOUT':
             case 'GATEWAY_ERROR':
             case 'NETWORK_DECLINE':
-              return ['SWITCH_RAIL_UPI', 'RETRY_SAME_RAIL_COOLDOWN'];
+              return ['RETRY_SAME_RAIL_COOLDOWN', 'SWITCH_TO_AVAILABLE_ALTERNATE_RAIL'];
             case 'OTP_DROP_OFF':
             case 'TRANSACTION_TIMEOUT':
-              return ['SWITCH_RAIL_UPI', 'CUSTOMER_PAYMENT_LINK'];
+              return ['RESUME_CHECKOUT', 'SWITCH_TO_AVAILABLE_ALTERNATE_RAIL'];
             case 'MANDATE_REVOKED':
             case 'LIMIT_EXCEEDED':
-              return ['SWITCH_RAIL_UPI', 'CORPORATE_INVOICE'];
+              return ['REAUTHORIZE_MANDATE', 'COLLECT_OUTSTANDING_PAYMENT'];
             case 'EXPIRED_CARD':
-              return ['ESCALATE_HUMAN'];
+              return ['UPDATE_PAYMENT_METHOD'];
             case 'FRAUD_SUSPECTED':
               return ['ESCALATE_HUMAN'];
             default:
-              return ['SWITCH_RAIL_UPI', 'RETRY_SAME_RAIL_COOLDOWN'];
+              return ['SWITCH_TO_AVAILABLE_ALTERNATE_RAIL', 'RETRY_SAME_RAIL_COOLDOWN'];
           }
         })();
 
     const tabs: TabDefinition[] = [];
 
-    // 1. Instant UPI Switch / Direct Bypass
-    if (actions.includes('SWITCH_RAIL_UPI') || actions.includes('RETRY_AUTHENTICATION')) {
+    // 1. Switch to Saved Alternate Card
+    if (actions.includes('SWITCH_TO_SAVED_CARD')) {
+      const isRec = mlAction === 'SWITCH_TO_SAVED_CARD';
+      tabs.push({
+        key: 'CARD_ALT',
+        label: 'Use Backup Card',
+        subLabel: 'Visa •••• 4821 (Active)',
+        icon: <CreditCard size={14} />,
+        isRecommended: isRec
+      });
+    }
+
+    // 2. Update Payment Method / Replace Expired Card
+    if (actions.includes('UPDATE_PAYMENT_METHOD')) {
+      const isRec = mlAction === 'UPDATE_PAYMENT_METHOD';
+      tabs.push({
+        key: 'UPDATE_CARD',
+        label: 'Update Card',
+        subLabel: 'Replace expired card details',
+        icon: <CreditCard size={14} />,
+        isRecommended: isRec
+      });
+    }
+
+    // 3. Instant UPI Switch / Direct Bypass
+    if (actions.includes('SWITCH_TO_AVAILABLE_ALTERNATE_RAIL') || actions.includes('RETRY_AUTHENTICATION') || actions.includes('RESUME_CHECKOUT')) {
       const isMandateBypass = rootCause === 'MANDATE_REVOKED' || rootCause === 'LIMIT_EXCEEDED';
-      const isRec = mlAction === 'SWITCH_RAIL_UPI' || mlAction === 'RETRY_AUTHENTICATION';
+      const isRec = mlAction === 'SWITCH_TO_AVAILABLE_ALTERNATE_RAIL' || mlAction === 'RESUME_CHECKOUT' || mlAction === 'RETRY_AUTHENTICATION';
       tabs.push({
         key: 'UPI',
         label: isMandateBypass ? 'Direct UPI Bypass' : 'Instant UPI',
@@ -178,7 +204,7 @@ export const OrderStatusPage: React.FC = () => {
       });
     }
 
-    // 2. Schedule Auto-Retry / Cooldown
+    // 4. Schedule Auto-Retry / Cooldown / Payday Window
     if (actions.includes('RETRY_SAME_RAIL_COOLDOWN') || actions.includes('RETRY_NEXT_PAYDAY_WINDOW') || actions.includes('RETRY_LATER')) {
       const isPayday = rootCause === 'INSUFFICIENT_FUNDS';
       const isRec = mlAction === 'RETRY_NEXT_PAYDAY_WINDOW' || mlAction === 'RETRY_SAME_RAIL_COOLDOWN' || mlAction === 'RETRY_LATER';
@@ -191,19 +217,7 @@ export const OrderStatusPage: React.FC = () => {
       });
     }
 
-    // 3. 5% Early Concession
-    if (actions.includes('INCENTIVE_DISCOUNT')) {
-      const isRec = mlAction === 'INCENTIVE_DISCOUNT' || mlAction.includes('DISCOUNT');
-      tabs.push({
-        key: 'DISCOUNT',
-        label: '5% Early Concession',
-        subLabel: 'Instant pre-approved discount',
-        icon: <Percent size={14} />,
-        isRecommended: isRec
-      });
-    }
-
-    // 4. Promise to Pay (PTP)
+    // 5. Promise to Pay (PTP)
     if (actions.includes('PROMISE_TO_PAY')) {
       const isRec = mlAction === 'PROMISE_TO_PAY';
       tabs.push({
@@ -215,21 +229,9 @@ export const OrderStatusPage: React.FC = () => {
       });
     }
 
-    // 5. Re-Authentication Link (OTP Drop-off)
-    if (actions.includes('CUSTOMER_PAYMENT_LINK')) {
-      const isRec = mlAction === 'CUSTOMER_PAYMENT_LINK';
-      tabs.push({
-        key: 'LINK',
-        label: 'Re-Auth Link',
-        subLabel: 'Resend payment authorization link',
-        icon: <Send size={14} />,
-        isRecommended: isRec
-      });
-    }
-
-    // 6. Corporate PO & Net-30 Invoicing (Only if amount >= ₹5,000)
-    if (actions.includes('CORPORATE_INVOICE') && c.amount_inr >= 5000) {
-      const isRec = mlAction === 'CORPORATE_INVOICE';
+    // 7. Corporate PO & Net-30 Invoicing
+    if ((actions.includes('COLLECT_OUTSTANDING_PAYMENT') || actions.includes('CORPORATE_INVOICE')) && c.amount_inr >= 5000) {
+      const isRec = mlAction === 'COLLECT_OUTSTANDING_PAYMENT' || mlAction === 'CORPORATE_INVOICE';
       tabs.push({
         key: 'INVOICE',
         label: 'Corporate PO',
@@ -239,8 +241,8 @@ export const OrderStatusPage: React.FC = () => {
       });
     }
 
-    // 7. Human Support Escalation
-    if (actions.includes('ESCALATE_HUMAN') && (tabs.length === 0 || rootCause === 'EXPIRED_CARD' || rootCause === 'FRAUD_SUSPECTED')) {
+    // 8. Human Support Escalation
+    if (actions.includes('ESCALATE_HUMAN') && (tabs.length === 0 || rootCause === 'FRAUD_SUSPECTED')) {
       tabs.push({
         key: 'ESCALATE',
         label: 'Human Support',
@@ -248,6 +250,9 @@ export const OrderStatusPage: React.FC = () => {
         icon: <UserCheck size={14} />
       });
     }
+
+    // Ensure the ML-recommended tab is always ordered first for the customer
+    tabs.sort((a, b) => (b.isRecommended ? 1 : 0) - (a.isRecommended ? 1 : 0));
 
     return tabs;
   };
