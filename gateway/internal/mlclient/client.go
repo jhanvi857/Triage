@@ -297,26 +297,37 @@ func computeContextualProbability(f CaseFeatures, action string) float64 {
 
 	switch f.Cause {
 	case "INSUFFICIENT_FUNDS":
-		if action == "RETRY_LATER" {
-			if f.PaydayProximityDays <= 2 {
-				return math.Min(0.90, 0.82+0.08*(hist-0.5))
-			} else if f.PaydayProximityDays <= 5 {
-				return 0.55
+		switch action {
+		case "SWITCH_TO_SAVED_CARD":
+			// If alternate saved card exists and has proven success history
+			if hist >= 0.6 {
+				return math.Min(0.88, 0.76+0.12*(hist-0.5))
 			}
-			return 0.31
-		} else if action == "RETRY_NEXT_PAYDAY_WINDOW" {
+			return 0.70
+
+		case "RETRY_NEXT_PAYDAY_WINDOW", "RETRY_LATER":
+			// Payday proximity is decisive for retry success
 			if f.PaydayProximityDays <= 2 {
-				return math.Min(0.88, 0.80+0.08*(hist-0.5))
+				return math.Min(0.92, 0.84+0.08*(hist-0.5))
 			} else if f.PaydayProximityDays <= 5 {
-				return 0.58
+				return 0.62
 			}
-			return 0.35
-		} else if action == "INCENTIVE_DISCOUNT" {
+			return 0.32
+
+		case "PROMISE_TO_PAY":
+			// High re-engagement when payday is far away or mid-cycle
+			if f.PaydayProximityDays >= 6 {
+				return math.Min(0.82, 0.74+0.10*(hist-0.5))
+			}
+			return 0.48
+
+		case "INCENTIVE_DISCOUNT":
 			if f.PaydayProximityDays >= 6 && f.AmountPaise <= 600000 {
-				return math.Min(0.82, 0.67+0.10*(hist-0.5))
+				return math.Min(0.80, 0.65+0.10*(hist-0.5))
 			}
-			return 0.43
-		} else if action == "ESCALATE_HUMAN" {
+			return 0.40
+
+		case "ESCALATE_HUMAN":
 			if f.AmountPaise >= 1000000 || attempt >= 2 {
 				return 0.65
 			}
@@ -324,19 +335,22 @@ func computeContextualProbability(f CaseFeatures, action string) float64 {
 		}
 
 	case "BANK_DOWNTIME_TIMEOUT":
-		if action == "RETRY_SAME_RAIL_COOLDOWN" {
+		switch action {
+		case "RETRY_SAME_RAIL_COOLDOWN":
 			if f.TimeSinceFailureHours <= 2.0 && attempt == 1 {
 				return 0.86
 			} else if f.TimeSinceFailureHours <= 4.0 {
 				return 0.55
 			}
 			return 0.25
-		} else if action == "SWITCH_RAIL_UPI" {
+
+		case "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
 			if f.TimeSinceFailureHours > 2.0 || attempt >= 2 {
-				return 0.78
+				return 0.80
 			}
-			return 0.45
-		} else if action == "ESCALATE_HUMAN" {
+			return 0.48
+
+		case "ESCALATE_HUMAN":
 			if f.AmountPaise >= 1000000 {
 				return 0.70
 			}
@@ -344,37 +358,37 @@ func computeContextualProbability(f CaseFeatures, action string) float64 {
 		}
 
 	case "EXPIRED_CARD":
-		if action == "SWITCH_RAIL_UPI" {
+		switch action {
+		case "UPDATE_PAYMENT_METHOD":
 			if hist >= 0.5 {
-				return math.Min(0.88, 0.76+0.12*hist)
+				return math.Min(0.90, 0.82+0.08*hist)
 			}
+			return 0.75
+
+		case "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
 			return 0.60
-		} else if action == "CUSTOMER_PAYMENT_LINK" {
-			if f.AmountPaise >= 800000 {
-				return 0.68
-			}
-			return 0.55
-		} else if action == "ESCALATE_HUMAN" {
+
+		case "ESCALATE_HUMAN":
 			if f.AmountPaise >= 1000000 {
-				return 0.62
+				return 0.65
 			}
-			return 0.15
+			return 0.20
 		}
 
 	case "OTP_DROP_OFF":
-		if action == "RETRY_AUTHENTICATION" {
+		switch action {
+		case "RESUME_CHECKOUT", "RETRY_AUTHENTICATION":
 			if f.Hour >= 9 && f.Hour <= 20 && f.TimeSinceFailureHours <= 1.0 {
-				return 0.84
+				return 0.88
 			} else if f.Hour >= 9 && f.Hour <= 20 {
-				return 0.60
+				return 0.68
 			}
-			return 0.32
-		} else if action == "CUSTOMER_PAYMENT_LINK" {
-			if f.Hour < 9 || f.Hour > 20 {
-				return 0.66
-			}
-			return 0.52
-		} else if action == "ESCALATE_HUMAN" {
+			return 0.40
+
+		case "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
+			return 0.75
+
+		case "ESCALATE_HUMAN":
 			if f.AmountPaise >= 1000000 {
 				return 0.58
 			}
@@ -382,17 +396,32 @@ func computeContextualProbability(f CaseFeatures, action string) float64 {
 		}
 
 	case "MANDATE_REVOKED":
-		if action == "INCENTIVE_DISCOUNT" {
+		switch action {
+		case "REAUTHORIZE_MANDATE":
+			if f.AmountPaise <= 800000 {
+				return 0.74
+			}
+			return 0.55
+
+		case "COLLECT_OUTSTANDING_PAYMENT", "CORPORATE_INVOICE":
+			if f.AmountPaise >= 500000 {
+				return 0.72
+			}
+			return 0.60
+
+		case "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
+			if f.AmountPaise <= 800000 {
+				return 0.55
+			}
+			return 0.35
+
+		case "INCENTIVE_DISCOUNT":
 			if f.AmountPaise <= 500000 {
 				return 0.64
 			}
 			return 0.38
-		} else if action == "SWITCH_RAIL_UPI" {
-			if f.AmountPaise <= 800000 {
-				return 0.52
-			}
-			return 0.35
-		} else if action == "ESCALATE_HUMAN" {
+
+		case "ESCALATE_HUMAN":
 			if f.AmountPaise >= 800000 {
 				return 0.75
 			}
@@ -403,12 +432,15 @@ func computeContextualProbability(f CaseFeatures, action string) float64 {
 		if action == "ESCALATE_HUMAN" {
 			return 0.40
 		}
+		if action == "STOP" {
+			return 0.0
+		}
 		return 0.0
 
 	case "NETWORK_DECLINE":
 		if action == "RETRY_SAME_RAIL_COOLDOWN" {
 			return 0.76
-		} else if action == "SWITCH_RAIL_UPI" {
+		} else if action == "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL" {
 			return 0.68
 		}
 		return 0.20
