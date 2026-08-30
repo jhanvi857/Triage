@@ -14,8 +14,11 @@ import {
 
 export type NavTab =
   | "OVERVIEW"
+  | "PORTFOLIO"
   | "RECOVERY"
   | "CASES"
+  | "SCHEDULER"
+  | "COORDINATION"
   | "ALLOCATOR"
   | "EVALUATION"
   | "AUDIT"
@@ -46,11 +49,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const NAV_ITEMS: NavItemConfig[] = [
     { id: "OVERVIEW", label: "Live Operations", icon: LayoutDashboard },
+    {
+      id: "PORTFOLIO",
+      label: "Portfolio Queue",
+      icon: Layers,
+      badge: "RANKED",
+      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+    },
     { id: "RECOVERY", label: "Recovery Queue", icon: RotateCcw },
     { id: "CASES", label: "Pipeline", icon: Layers },
     {
+      id: "SCHEDULER",
+      label: "Scheduler",
+      icon: Calendar,
+      badge: "SIM-TIME",
+      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+    },
+    {
+      id: "COORDINATION",
+      label: "Coordination",
+      icon: ShieldCheck,
+      badge: "CROSS-WF",
+      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+    },
+    {
       id: "ALLOCATOR",
-      label: "Portfolio Allocator",
+      label: "Resource Allocator",
       icon: SettingsIcon,
       badge: "KNAPSACK",
       badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",

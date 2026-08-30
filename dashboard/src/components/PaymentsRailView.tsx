@@ -202,8 +202,8 @@ export const PaymentsRailView: React.FC<PaymentsRailViewProps> = ({ cases, onSel
             <tbody className="divide-y divide-[#E2E5E5]">
               {cases.map((c) => {
                 const targetRail =
-                  c.intervention?.action === "SWITCH_RAIL_UPI"
-                    ? "UPI (SWITCHED)"
+                  c.intervention?.action === "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"
+                    ? "ALTERNATE RAIL (SWITCHED)"
                     : c.original_rail;
 
                 return (

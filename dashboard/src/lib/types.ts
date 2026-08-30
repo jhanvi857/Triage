@@ -218,19 +218,64 @@ export interface ForecastReport {
   honesty_disclosure: string;
 }
 
+export interface PaymentInstrument {
+  id: string;
+  type: string;
+  brand?: string;
+  last4?: string;
+  upi_handle?: string;
+  is_active: boolean;
+  success_rate?: number;
+  past_tx_count?: number;
+  label: string;
+}
+
+export interface CandidateEvaluation {
+  action: string;
+  display_name: string;
+  eligible: boolean;
+  reason: string;
+  signals: string[];
+}
+
+export interface ActionDecisionRationale {
+  recommended_action: string;
+  expected_recovery_inr: number;
+  recovery_probability: number;
+  positive_signals: string[];
+  rejected_alternatives: string[];
+  policy_passed_checks: string[];
+}
+
+export interface CustomerNudgeDraft {
+  approved_action: string;
+  channel: "WHATSAPP" | "EMAIL" | "SMS" | string;
+  headline: string;
+  body: string;
+  primary_cta: string;
+  secondary_cta?: string;
+  action_url: string;
+  model_used: string;
+  safety_validated: boolean;
+  validation_notes?: string[];
+  generated_at: string;
+}
+
 export interface InterventionDecision {
   case_id: string;
   action: string;
   reasoning: string;
   target_rail?: string;
-  cooldown_duration?: number;
-  next_execution_at?: string;
+  cooldown_duration: number;
+  next_execution_at: string;
   incentive_amount_paise?: number;
   incentive_percent?: number;
-  is_stopping_rule_hit?: boolean;
+  is_stopping_rule_hit: boolean;
   stopping_reason?: string;
-  policy_verdict?: "AUTHORIZED" | "VETOED" | string;
-  policy_rules?: PolicyRuleEvaluation[];
+  policy_verdict: "AUTHORIZED" | "VETOED" | string;
+  policy_rules: PolicyRuleEvaluation[];
+  candidate_evaluations?: CandidateEvaluation[];
+  action_rationale?: ActionDecisionRationale;
   ml_rankings?: RankedCandidate[];
   ml_recommendation?: string;
   ml_probability?: number;
@@ -258,10 +303,19 @@ export interface TriageCase {
   status: CaseStatus;
   source?: "LIVE" | "SYNTHETIC" | string;
   allowed_actions?: string[];
+  available_instruments?: PaymentInstrument[];
+  has_alternate_saved_card?: boolean;
+  alternate_saved_card_label?: string;
+  alternate_card_success_count?: number;
+  has_upi_available?: boolean;
+  can_update_payment_method?: boolean;
+  candidate_evaluations?: CandidateEvaluation[];
+  action_rationale?: ActionDecisionRationale;
   diagnosis?: DiagnosticReport;
   intervention?: InterventionDecision;
   ptp_status?: PTPParseResult;
   customer_facing_msg?: string;
+  customer_nudge_draft?: CustomerNudgeDraft;
   is_simulated?: boolean;
   payday_proximity_days?: number;
   historical_success_rate?: number;
@@ -422,3 +476,120 @@ export interface ProductItem {
   in_stock: boolean;
   category: string;
 }
+
+// Bounded Recovery Plan Types
+export interface PlanStep {
+  step_index: number;
+  action: string;
+  scheduled_at: string;
+  cooldown_duration?: string;
+  status: "PENDING" | "EXECUTING" | "SUCCESS" | "FAILURE" | "SKIPPED";
+  success_transition: string;
+  failure_transition: string;
+  stop_conditions?: string[];
+  executed_at?: string;
+  result?: string;
+  idempotency_key: string;
+}
+
+export interface RecoveryPlan {
+  case_id: string;
+  steps: PlanStep[];
+  max_steps: number;
+  current_step_index: number;
+  status: "ACTIVE" | "COMPLETED" | "STOPPED" | "ESCALATED" | "MARK_LOST_EXHAUSTED";
+  created_at: string;
+  updated_at: string;
+}
+
+// Portfolio Prioritization Types
+export interface PriorityExplanation {
+  gross_expected_recovery_paise: number;
+  gross_expected_recovery_inr: number;
+  net_expected_recovery_paise?: number;
+  net_expected_recovery_inr?: number;
+  recovery_probability: number;
+  time_sensitivity: number;
+  time_sensitivity_reason: string;
+  customer_value_factor: number;
+  intervention_cost_paise: number;
+  risk_penalty_paise: number;
+  final_score_paise: number;
+  final_score_inr: number;
+}
+
+export interface PrioritizedOpportunity {
+  case_id: string;
+  customer_id: string;
+  customer_name: string;
+  source_type: string;
+  amount_paise: number;
+  amount_inr: number;
+  status: string;
+  action?: string;
+  priority_score: number;
+  priority_rank: number;
+  explanation: PriorityExplanation;
+}
+
+export interface PortfolioSummary {
+  total_opportunities: number;
+  total_revenue_at_risk_paise: number;
+  total_revenue_at_risk_inr: number;
+  total_expected_recovery_paise: number;
+  total_expected_recovery_inr: number;
+  queue: PrioritizedOpportunity[];
+}
+
+// Customer Cross-Workflow Coordination Types
+export interface OpportunitySummary {
+  case_id: string;
+  source_type: string;
+  amount_paise: number;
+  amount_inr: number;
+  status: string;
+  action?: string;
+}
+
+export interface CustomerState {
+  customer_id: string;
+  customer_name: string;
+  total_revenue_at_risk_paise: number;
+  total_revenue_at_risk_inr: number;
+  active_opportunities: OpportunitySummary[];
+  previous_interventions: number;
+  active_promises: number;
+  cooldown_active: boolean;
+  cooldown_expires_at?: string;
+  last_contact_at?: string;
+  fraud_flag: boolean;
+  communication_count: number;
+}
+
+export interface CoordinationDecision {
+  customer_id: string;
+  case_id: string;
+  decision: "PROCEED" | "DEFER" | "MERGE" | "SUPPRESS" | "ESCALATE";
+  reason: string;
+  priority_case_id?: string;
+}
+
+// Scheduler Types
+export interface ScheduledStep {
+  case_id: string;
+  step_index: number;
+  action: string;
+  scheduled_at: string;
+  idempotency_key: string;
+  cancelled: boolean;
+  executed: boolean;
+}
+
+export interface SchedulerPendingReport {
+  current_simulated_time: string;
+  pending_steps_count: number;
+  due_steps_count: number;
+  pending_steps: ScheduledStep[];
+  due_steps: ScheduledStep[];
+}
+

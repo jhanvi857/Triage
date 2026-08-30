@@ -103,13 +103,15 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
   const formatAction = (c: TriageCase) => {
     if (c.intervention?.action) {
       const act = c.intervention.action;
+      if (act === "SWITCH_TO_SAVED_CARD") return "Backup Card";
       if (act === "RETRY_NEXT_PAYDAY_WINDOW") return "Payday Retry";
-      if (act === "RETRY_LATER") return "Retry (24h)";
-      if (act === "RETRY_SAME_RAIL_COOLDOWN") return "Cooldown Retry";
-      if (act === "SWITCH_RAIL_UPI") return "Switch to UPI";
-      if (act === "INCENTIVE_DISCOUNT") return "5% Concession";
-      if (act === "CUSTOMER_PAYMENT_LINK") return "Payment Link";
-      if (act === "RETRY_AUTHENTICATION") return "WhatsApp 1-Click";
+      if (act === "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL") return "Switch Rail";
+      if (act === "UPDATE_PAYMENT_METHOD") return "Update Method";
+      if (act === "RESUME_CHECKOUT") return "Resume Checkout";
+      if (act === "REAUTHORIZE_MANDATE") return "Reauth Mandate";
+      if (act === "COLLECT_OUTSTANDING_PAYMENT") return "Collect Invoice";
+      if (act === "PROMISE_TO_PAY") return "Promise to Pay";
+      if (act === "RETRY_SAME_RAIL_COOLDOWN" || act === "RETRY_LATER") return "Cooldown Retry";
       if (act === "ESCALATE_HUMAN") return "Human Desk";
       if (act === "STOP") return "Risk Stop";
       if (act === "MARK_LOST_EXHAUSTED") return "Mark Lost";

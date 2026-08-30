@@ -15,6 +15,9 @@ import { CustomerMatrixView } from "../components/CustomerMatrixView";
 import { AnalyticsUpliftView } from "../components/AnalyticsUpliftView";
 import { PortfolioAllocatorView } from "../components/PortfolioAllocatorView";
 import { ExceptionsQueueView } from "../components/ExceptionsQueueView";
+import { PortfolioQueueView } from "../components/PortfolioQueueView";
+import { SchedulerView } from "../components/SchedulerView";
+import { CoordinationView } from "../components/CoordinationView";
 import {
   fetchCases,
   createCase,
@@ -326,7 +329,15 @@ export default function RevenueControlPage() {
                 </div>
               )}
 
-              {/* 2. RECOVERY QUEUE TAB */}
+              {/* 2. PRIORITIZED PORTFOLIO QUEUE TAB */}
+              {activeTab === "PORTFOLIO" && (
+                <PortfolioQueueView
+                  onSelectCase={(c) => setSelectedCaseDetail(cases.find(x => x.id === c.id) || null)}
+                  onRefresh={loadData}
+                />
+              )}
+
+              {/* 3. RECOVERY QUEUE TAB */}
               {activeTab === "RECOVERY" && (
                 <div className="space-y-4">
                   <RecoveryQueueTable
@@ -340,7 +351,7 @@ export default function RevenueControlPage() {
                 </div>
               )}
 
-              {/* 3. CASES / PIPELINE TAB */}
+              {/* 4. CASES / PIPELINE TAB */}
               {activeTab === "CASES" && (
                 <RecoveryPipelineView
                   cases={filteredCases}
@@ -352,7 +363,17 @@ export default function RevenueControlPage() {
                 />
               )}
 
-              {/* 4. PORTFOLIO ALLOCATOR TAB (KNAPSACK OPTIMIZATION) */}
+              {/* 5. DETERMINISTIC SCHEDULER TAB */}
+              {activeTab === "SCHEDULER" && (
+                <SchedulerView onRefresh={loadData} />
+              )}
+
+              {/* 6. CROSS-WORKFLOW COORDINATION TAB */}
+              {activeTab === "COORDINATION" && (
+                <CoordinationView />
+              )}
+
+              {/* 7. PORTFOLIO ALLOCATOR TAB (KNAPSACK OPTIMIZATION) */}
               {activeTab === "ALLOCATOR" && (
                 <PortfolioAllocatorView />
               )}

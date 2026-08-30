@@ -8,6 +8,7 @@ import {
   RetrainSummary,
   PortfolioPlan,
   ForecastReport,
+  CustomerNudgeDraft,
 } from "./types";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8080";
@@ -218,3 +219,97 @@ export async function resetTriageBoard(): Promise<boolean> {
 export function getTriageSSEUrl(): string {
   return `${GATEWAY_URL}/api/v1/triage/stream`;
 }
+
+export async function draftNudge(
+  caseId: string,
+  channel: "WHATSAPP" | "EMAIL" | "SMS"
+): Promise<{ case_id: string; draft: CustomerNudgeDraft } | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/cases/${caseId}/draft-nudge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error(`draftNudge (${caseId}) error:`, err);
+    return null;
+  }
+}
+
+export async function fetchPortfolioSummary(): Promise<any | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/portfolio`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("fetchPortfolioSummary error:", err);
+    return null;
+  }
+}
+
+export async function fetchCustomerState(customerId: string): Promise<any | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/customers/${customerId}/state`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("fetchCustomerState error:", err);
+    return null;
+  }
+}
+
+export async function fetchCasePlan(caseId: string): Promise<any | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/cases/${caseId}/plan`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("fetchCasePlan error:", err);
+    return null;
+  }
+}
+
+export async function advanceScheduler(duration: string): Promise<any | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/scheduler/advance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duration }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("advanceScheduler error:", err);
+    return null;
+  }
+}
+
+export async function triggerSchedulerStep(caseId: string): Promise<any | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/scheduler/trigger`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ case_id: caseId }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("triggerSchedulerStep error:", err);
+    return null;
+  }
+}
+
+export async function fetchSchedulerPending(): Promise<any | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/scheduler/pending`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("fetchSchedulerPending error:", err);
+    return null;
+  }
+}
+
+
