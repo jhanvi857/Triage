@@ -1,19 +1,20 @@
 {
-  "model_type": "RandomForestClassifier",
-  "n_estimators": 120,
+  "model_type": "RandomForest (Random Forest Classifier)",
+  "n_estimators": 100,
   "test_cases_evaluated": 750,
   "total_revenue_at_risk_inr": 4738600.0,
-  "baseline_recovered_inr": 2472030.0,
-  "ml_recovered_inr": 3083065.0,
-  "baseline_recovery_rate_pct": 54.4,
-  "ml_recovery_rate_pct": 59.87,
-  "absolute_uplift_pct_points": 5.47,
-  "relative_uplift_pct": 24.72,
-  "roc_auc": 0.9884,
-  "precision": 0.9396,
-  "recall": 0.9321,
-  "f1_score": 0.9358,
-  "accuracy": 0.9399,
+  "baseline_recovered_inr": 2424865.0,
+  "ml_recovered_inr": 2944570.0,
+  "baseline_recovery_rate_pct": 54.400000000000006,
+  "ml_recovery_rate_pct": 63.6,
+  "absolute_uplift_pct_points": 9.2,
+  "relative_uplift_pct": 21.43,
+  "roc_auc": 0.7512,
+  "precision": 0.651,
+  "recall": 0.6918,
+  "f1_score": 0.6708,
+  "accuracy": 0.6904,
+  "p99_latency_ms": 6.645,
   "actions_by_cause": {
     "BANK_DOWNTIME_TIMEOUT": [
       "RETRY_SAME_RAIL_COOLDOWN",
@@ -56,14 +57,13 @@
     ]
   },
   "action_selection_counts_ml": {
-    "INCENTIVE_DISCOUNT": 77,
-    "RETRY_LATER": 74,
-    "CUSTOMER_PAYMENT_LINK": 199,
-    "RETRY_NEXT_PAYDAY_WINDOW": 9,
-    "SWITCH_RAIL_UPI": 212,
-    "RETRY_SAME_RAIL_COOLDOWN": 73,
-    "ESCALATE_HUMAN": 74,
-    "STOP": 31,
-    "RETRY_AUTHENTICATION": 1
+    "INCENTIVE_DISCOUNT": 83,
+    "RETRY_LATER": 76,
+    "SWITCH_RAIL_UPI": 334,
+    "RETRY_SAME_RAIL_COOLDOWN": 32,
+    "RETRY_AUTHENTICATION": 74,
+    "ESCALATE_HUMAN": 108,
+    "CUSTOMER_PAYMENT_LINK": 35,
+    "RETRY_NEXT_PAYDAY_WINDOW": 8
   }
 }

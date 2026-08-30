@@ -292,6 +292,7 @@ def generate_synthetic_dataset(num_cases: int = 4000, seed: int = 42):
             "features": case_features,
             "allowed_actions": allowed_actions,
             "ground_truth_probs": {},
+            "action_outcomes": {},
             "static_baseline_action": allowed_actions[0],
         }
 
@@ -303,6 +304,7 @@ def generate_synthetic_dataset(num_cases: int = 4000, seed: int = 42):
             row["candidate_action"] = act
             data_rows.append((row, outcome, prob))
             case_record["ground_truth_probs"][act] = prob
+            case_record["action_outcomes"][act] = outcome
 
         case_records.append(case_record)
 
@@ -336,7 +338,7 @@ def train_and_evaluate():
     print(f"      - Validation Set : {len(val_cases)} cases ({n_val / num_cases * 100:.1f}%)")
     print(f"      - Held-Out Test  : {len(test_cases)} cases ({n_test / num_cases * 100:.1f}%)")
 
-    # Flatten train, val, test
+    # Flatten train, val, test using realistic stochastic Bernoulli outcomes
     def flatten_cases(cases):
         X_dict = []
         y = []
@@ -344,9 +346,7 @@ def train_and_evaluate():
             for act in c["allowed_actions"]:
                 row = dict(c["features"])
                 row["candidate_action"] = act
-                prob = c["ground_truth_probs"][act]
-                # Deterministic outcome drawn from the prob for evaluation consistency
-                outcome = 1 if prob >= 0.50 else 0
+                outcome = c["action_outcomes"][act]
                 X_dict.append(row)
                 y.append(outcome)
         return X_dict, np.array(y)

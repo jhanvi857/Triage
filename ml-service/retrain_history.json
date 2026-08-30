@@ -1,0 +1,86 @@
+[
+  {
+    "retrained_at": "2026-08-30T05:19:42Z",
+    "feedback_samples_ingested": 787,
+    "total_training_samples": 12839,
+    "held_out_test_cases": 750,
+    "revenue_at_risk_inr": 4738600.0,
+    "before_retrain": {
+      "roc_auc": 0.7512,
+      "f1_score": 0.6708,
+      "accuracy": 0.6904,
+      "recovery_rate_pct": 63.6,
+      "recovered_inr": 2944570.0
+    },
+    "after_retrain": {
+      "roc_auc": 0.7514,
+      "f1_score": 0.6634,
+      "accuracy": 0.6855,
+      "recovery_rate_pct": 64.27,
+      "recovered_inr": 2994245.0
+    },
+    "delta": {
+      "delta_roc_auc": 0.0002,
+      "delta_f1_score": -0.0074,
+      "delta_recovery_rate_pct_points": 0.67,
+      "delta_recovered_inr": 49675.0
+    },
+    "status": "SUCCESSFUL_RETRAIN"
+  },
+  {
+    "retrained_at": "2026-08-30T05:46:33Z",
+    "feedback_samples_ingested": 787,
+    "total_training_samples": 12839,
+    "held_out_test_cases": 750,
+    "revenue_at_risk_inr": 4738600.0,
+    "before_retrain": {
+      "roc_auc": 0.7514,
+      "f1_score": 0.6634,
+      "accuracy": 0.6855,
+      "recovery_rate_pct": 64.27,
+      "recovered_inr": 2994245.0
+    },
+    "after_retrain": {
+      "roc_auc": 0.7514,
+      "f1_score": 0.6634,
+      "accuracy": 0.6855,
+      "recovery_rate_pct": 64.27,
+      "recovered_inr": 2994245.0
+    },
+    "delta": {
+      "delta_roc_auc": 0.0,
+      "delta_f1_score": 0.0,
+      "delta_recovery_rate_pct_points": 0.0,
+      "delta_recovered_inr": 0.0
+    },
+    "status": "SUCCESSFUL_RETRAIN"
+  },
+  {
+    "retrained_at": "2026-08-30T05:49:33Z",
+    "feedback_samples_ingested": 787,
+    "total_training_samples": 12839,
+    "held_out_test_cases": 750,
+    "revenue_at_risk_inr": 4738600.0,
+    "before_retrain": {
+      "roc_auc": 0.7514,
+      "f1_score": 0.6634,
+      "accuracy": 0.6855,
+      "recovery_rate_pct": 64.27,
+      "recovered_inr": 2994245.0
+    },
+    "after_retrain": {
+      "roc_auc": 0.7514,
+      "f1_score": 0.6634,
+      "accuracy": 0.6855,
+      "recovery_rate_pct": 64.27,
+      "recovered_inr": 2994245.0
+    },
+    "delta": {
+      "delta_roc_auc": 0.0,
+      "delta_f1_score": 0.0,
+      "delta_recovery_rate_pct_points": 0.0,
+      "delta_recovered_inr": 0.0
+    },
+    "status": "SUCCESSFUL_RETRAIN"
+  }
+]

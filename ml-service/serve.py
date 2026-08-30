@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Triage ML Ranking Service — HTTP Inference Server
-Exposes Random Forest model for scoring and ranking bounded recovery candidates.
+Triage ML Ranking Service — HTTP Inference & Telemetry Server
+Exposes:
+  - Random Forest / XGBoost / LightGBM Ranking & Scoring Engine
+  - Multi-Model Offline Benchmark (/benchmark)
+  - Continuous Retraining Feedback Loop (/retrain, /retrain/history)
+  - Shadow Contextual Bandit Exploration Telemetry (Zero Execution Risk)
 Zero LLMs, zero external APIs.
 """
 
@@ -16,22 +20,30 @@ import joblib
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from shadow_bandit import shadow_bandit
+from retrain import run_retraining_loop
+from benchmark import benchmark_all_models
+
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.joblib")
 METRICS_PATH = os.path.join(BASE_DIR, "metrics.json")
+BENCHMARK_PATH = os.path.join(BASE_DIR, "model_benchmark.json")
+HISTORY_PATH = os.path.join(BASE_DIR, "retrain_history.json")
 
 model = None
 metrics_cache = {}
+benchmark_cache = {}
 
 
 def load_model():
-    global model, metrics_cache
+    global model, metrics_cache, benchmark_cache
     if os.path.exists(MODEL_PATH):
         try:
             model = joblib.load(MODEL_PATH)
-            print(f"[ML SERVICE] Successfully loaded Random Forest model from {MODEL_PATH}")
+            print(f"[ML SERVICE] Successfully loaded model from {MODEL_PATH}")
         except Exception as e:
             print(f"[ML SERVICE] Error loading model: {e}", file=sys.stderr)
     else:
@@ -44,6 +56,13 @@ def load_model():
         except Exception as e:
             print(f"[ML SERVICE] Error loading metrics: {e}", file=sys.stderr)
 
+    if os.path.exists(BENCHMARK_PATH):
+        try:
+            with open(BENCHMARK_PATH, "r", encoding="utf-8") as f:
+                benchmark_cache = json.load(f)
+        except Exception as e:
+            print(f"[ML SERVICE] Error loading benchmark: {e}", file=sys.stderr)
+
 
 load_model()
 
@@ -54,7 +73,9 @@ def health():
         "status": "healthy",
         "service": "Triage ML Ranking Service",
         "model_loaded": model is not None,
-        "model_type": "RandomForestClassifier",
+        "model_type": metrics_cache.get("model_type", "RandomForestClassifier"),
+        "shadow_bandit_active": True,
+        "retrain_loop_active": True,
     })
 
 
@@ -66,6 +87,60 @@ def get_metrics():
         with open(METRICS_PATH, "r", encoding="utf-8") as f:
             return jsonify(json.load(f))
     return jsonify({"error": "metrics not available"}), 404
+
+
+@app.route("/benchmark", methods=["GET", "POST"])
+def get_or_run_benchmark():
+    """
+    Returns the 3-model benchmark report (Random Forest vs XGBoost vs LightGBM vs Baseline).
+    If POST, triggers a fresh benchmark run.
+    """
+    global benchmark_cache
+    if request.method == "POST" or not os.path.exists(BENCHMARK_PATH):
+        try:
+            benchmark_cache = benchmark_all_models(num_cases=5000)
+            load_model()
+            return jsonify(benchmark_cache)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    if benchmark_cache:
+        return jsonify(benchmark_cache)
+
+    if os.path.exists(BENCHMARK_PATH):
+        with open(BENCHMARK_PATH, "r", encoding="utf-8") as f:
+            benchmark_cache = json.load(f)
+            return jsonify(benchmark_cache)
+
+    return jsonify({"error": "benchmark not available"}), 404
+
+
+@app.route("/retrain", methods=["POST"])
+def retrain_model():
+    """
+    Triggers continuous retraining feedback loop with optional ingested live outcomes.
+    Returns before/after evaluation delta on identical held-out test cases.
+    """
+    global model
+    try:
+        data = request.get_json(silent=True) or {}
+        new_outcomes = data.get("outcomes", [])
+        summary = run_retraining_loop(new_outcomes=new_outcomes)
+        load_model()
+        return jsonify(summary)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/retrain/history", methods=["GET"])
+def get_retrain_history():
+    """
+    Returns the audit history of model retraining runs with before/after deltas.
+    """
+    if os.path.exists(HISTORY_PATH):
+        with open(HISTORY_PATH, "r", encoding="utf-8") as f:
+            return jsonify(json.load(f))
+    return jsonify([])
 
 
 @app.route("/score", methods=["POST"])
@@ -119,8 +194,8 @@ def score_candidate():
 @app.route("/rank", methods=["POST"])
 def rank_candidates():
     """
-    Ranks multiple allowed candidate actions for a case and calculates expected recovery values.
-    Returns ordered candidate recommendations.
+    Ranks multiple allowed candidate actions for a case, calculates expected recovery values,
+    and runs the Shadow Contextual Bandit exploration in parallel (observation only).
     """
     if model is None:
         return jsonify({"error": "ML model not initialized"}), 503
@@ -131,7 +206,6 @@ def rank_candidates():
 
     candidates = data.get("candidate_actions", [])
     if not candidates:
-        # Default fallback candidate list based on cause
         cause = data.get("cause", "UNKNOWN_ERROR")
         actions_map = {
             "BANK_DOWNTIME_TIMEOUT": ["RETRY_SAME_RAIL_COOLDOWN", "SWITCH_RAIL_UPI", "ESCALATE_HUMAN"],
@@ -172,7 +246,8 @@ def rank_candidates():
         probs = model.predict_proba(rows)[:, 1]
         for act, prob in zip(candidates, probs):
             p = float(prob)
-            ev = int(p * float(amount_paise))
+            disc_est = min(int(amount_paise * 0.05), 50000) if "DISCOUNT" in act else 0
+            ev = int(p * float(amount_paise - disc_est))
 
             reasoning = f"Predicted {p*100.0:.1f}% recovery probability based on contextual history & timing (EV: ₹{ev/100:.2f})"
             if act == "ESCALATE_HUMAN":
@@ -191,16 +266,26 @@ def rank_candidates():
 
         # Sort descending by Expected Value
         ranked_list.sort(key=lambda x: x["expected_value_paise"], reverse=True)
-
         selected = ranked_list[0] if ranked_list else None
+        prod_action = selected["action"] if selected else "STOP"
+
+        # Evaluate Shadow Contextual Bandit (Zero execution risk)
+        case_id = data.get("case_id", "")
+        bandit_report = shadow_bandit.evaluate_shadow_choice(
+            case_id=case_id,
+            features=base_feature_dict,
+            candidate_scores=ranked_list,
+            production_choice=prod_action,
+        )
 
         return jsonify({
-            "case_id": data.get("case_id", ""),
+            "case_id": case_id,
             "cause": base_feature_dict["cause"],
             "amount_paise": amount_paise,
             "ranked_candidates": ranked_list,
             "selected_candidate": selected,
-            "model_type": "RandomForestClassifier",
+            "shadow_bandit": bandit_report,
+            "model_type": metrics_cache.get("model_type", "RandomForestClassifier"),
             "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         })
     except Exception as e:
@@ -212,7 +297,8 @@ def main():
     print(f"============================================================")
     print(f"  TRIAGE ML RANKING SERVICE (RandomForestClassifier)")
     print(f"  Status: Active & Serving on http://0.0.0.0:{port}")
-    print(f"  Zero LLMs | Pure ML Ranking & Expected Value Optimization")
+    print(f"  Multi-Model Benchmark | Shadow Bandit | Retrain Loop")
+    print(f"  Zero LLMs | Pure Mathematical Optimization & Policy Gating")
     print(f"============================================================")
     app.run(host="0.0.0.0", port=port, debug=False)
 
