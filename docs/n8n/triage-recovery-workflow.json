@@ -59,13 +59,13 @@
               "value2": "RETRY_SAME_RAIL_COOLDOWN"
             },
             {
-              "value2": "SWITCH_RAIL_UPI"
+              "value2": "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"
             },
             {
-              "value2": "CUSTOMER_PAYMENT_LINK"
+              "value2": "UPDATE_PAYMENT_METHOD"
             },
             {
-              "value2": "RETRY_AUTHENTICATION"
+              "value2": "RESUME_CHECKOUT"
             },
             {
               "value2": "INCENTIVE_DISCOUNT"

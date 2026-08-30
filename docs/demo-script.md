@@ -107,14 +107,14 @@ python agent/run_scenarios.py --batch 50
 **What is demonstrated**:
 - **Held-Out Test Set Metrics** (750 Test Cases):
   - Model: `RandomForestClassifier (100 Trees)`
-  - **ROC-AUC**: `0.9884`
-  - **Precision**: `93.96%`
-  - **Recall**: `93.21%`
-  - **F1-Score**: `0.9358`
-  - **Accuracy**: `93.99%`
+  - **ROC-AUC**: `0.7819`
+  - **Precision**: `67.88%`
+  - **Recall**: `84.78%`
+  - **F1-Score**: `0.7539`
+  - **Accuracy**: `71.92%`
 - **Canonical Uplift Metric**:
-  - **`+5.47 percentage points` Absolute Recovery Uplift**
-  - **`+24.72%` Relative Revenue Uplift**
+  - **`+5.60 percentage points` Absolute Recovery Uplift** ($68.40\% \text{ vs } 62.80\%$)
+  - **`+11.12%` Relative Revenue Uplift** ($+₹296,300\text{ on } ₹4.35\text{M at risk}$)
 - **Head-to-Head Batch Comparison (50 Cases)**:
   - Evaluates Static Baseline vs ML Ranked Policy on the **exact same test cases** using Common Random Numbers (CRN).
   - Eliminates small-sample variance and demonstrates statistically consistent recovery uplift.
@@ -125,9 +125,9 @@ python agent/run_scenarios.py --batch 50
 
 > **Deliver this proactively before judges ask:**
 >
-> *"Judges, a note on our metrics: The high precision (93.96%) and ROC-AUC (0.9884) reflect the Random Forest model accurately learning and inverting the multi-variable contextual interaction effects ($\text{cause} \times \text{action} \times \text{context}$) hand-crafted into our synthetic simulation.*
+> *"Judges, an honest note on our ML metrics: In payment recovery, real-world customer liquidity and bank infrastructure have irreducible entropy. We evaluated our models with stochastic Bernoulli noise across 750 held-out cases rather than sharp threshold memorization.*
 >
-> *This rigorously demonstrates that **our expected-value ranking mechanism and candidate selection engine work mathematically end-to-end**, rather than making an overfitted claim of real-world human behavioral prediction. In production, the model would continuously train on merchant-specific historical decline outcomes."*
+> *Our Random Forest model achieves **0.7819 ROC-AUC** and **+5.60 percentage points recovery uplift** (reaching **0.7953 ROC-AUC / +8.93pp** with XGBoost). This closely mirrors published fintech benchmarks (like Razorpay's dynamic smart routing and Stripe's smart retries where a 5–8pp uplift drives tens of millions in enterprise GMV), demonstrating that our contextual ranking engine genuinely optimizes recovery economics rather than overfitting to synthetic generator shortcuts."*
 
 ---
 

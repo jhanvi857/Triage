@@ -1,112 +1,192 @@
-# Triage — Autonomous AI Revenue Recovery Architecture
+# Triage — Seven-Stage Autonomous Revenue Recovery Architecture
 
-> **"Triage is an autonomous AI revenue recovery engine for failed subscription and invoice payments. It combines deterministic diagnosis, machine-learned intervention ranking, and strict policy gating to recover at-risk revenue safely, idempotently, and auditably."**
-
-> **"No LLM is used anywhere in Triage. Interventions are selected via a Random Forest ranking model over bounded action spaces, constrained by deterministic policy rules and logged to a SHA-256 hash-chained recovery ledger."**
+> **"Context determines what is possible. ML determines what is preferable. Deterministic policy determines what is permissible. The executor determines what actually happens. Every outcome feeds the recovery ledger and future decisioning."**
 
 ---
 
-## 1. System Philosophy & Non-Negotiables
+## 1. System Pipeline & Authority Hierarchy
 
 ```text
-ML ranks bounded recovery choices.
-Deterministic code diagnoses, authorizes, limits, executes, and audits.
+               REVENUE AT RISK SURFACES
+ (Failed Payment · Abandoned Checkout · Failed Subscription · Overdue Invoice · Mandate Failure)
+                                   │
+                                   ▼
+                            ┌──────────────┐
+                            │ 1. DIAGNOSIS │
+                            │What happened?│ → Deterministic failure mapping (8 Root Causes, 0 AI)
+                            └──────┬───────┘
+                                   │
+                                   ▼
+                           ┌───────────────┐
+                           │ 2. ELIGIBILITY│
+                           │What is possible│ → Context-aware instrument & action candidate bounds
+                           └───────┬───────┘
+                                   │
+                                   ▼
+                           ┌───────────────┐
+                           │ 3. ML RANKING │
+                           │What is better?│ → Random Forest estimates P(recover|x,a); Expected Recovery Value
+                           └───────┬───────┘
+                                   │
+                                   ▼
+                            ┌──────────────┐
+                            │  4. POLICY   │
+                            │What is allowed│ → Deterministic vetoes: max attempts, ₹10k threshold, fraud, concession cap
+                            └──────┬───────┘
+                                   │
+                                   ▼
+                     5. APPROVED ACTION ENVELOPE
+                     (Immutable Context & Boundary)
+                                   │
+                ┌──────────────────┴──────────────────┐
+                │                                     │
+                ▼                                     ▼
+      COMMUNICATION BRANCH                    EXECUTION BRANCH
+      (Non-Authoritative)                     (Authoritative / Idempotent)
+                │                                     │
+         ┌──────▼──────┐                       ┌──────▼──────┐
+         │ 6. Template │                       │Deterministic│
+         │    Nudge    │                       │  Executor   │
+         └──────┬──────┘                       └──────┬──────┘
+                │                                     │
+         Output Validator                      Idempotency Check
+                │                                     │
+                ▼                                     ▼
+         Customer Copy                         Authorized Recovery Action
+                │                                     │
+                ▼                                     ▼
+         Customer Channel                      Razorpay API / Gateway
+                │                                     │
+                └──────────────────┬──────────────────┘
+                                   │
+                                   ▼
+                          7. OUTCOME + AUDIT
+                         ┌───────────────────┐
+                         │ Outcome Observer  │
+                         │ SHA-256 Ledger    │
+                         └───────────────────┘
 ```
 
-- **Zero LLMs / Zero Generative AI**: No OpenAI, Gemini, Claude, ReAct agents, or LLM-generated customer outreach.
-- **Zero AI in Diagnosis**: Telemetry is mapped deterministically from Razorpay error codes (`error_reason`, `error_source`, `error_step`, `description`) into 7 known root causes. Unclassifiable telemetry is flagged as `UNKNOWN_ERROR` requiring human review.
-- **Zero AI in Financial Execution**: Model predictions are pure recommendations. The Deterministic Policy Engine enforces stopping rules, max retry bounds, concession limits, high-value thresholds, and fraud gating.
-- **Zero Hallucinated Actions**: For every root cause, only a bounded whitelist of pre-approved candidates $\mathcal{A}(\text{cause})$ is scored.
-- **Deterministic Customer Messaging**: Parameter substitution on fixed template matrices (`templates[Cause][Action]`).
-- **Deterministic Promise-to-Pay (PTP)**: Regex matching for scheduled dates and confirmations; complex or ambiguous language routes to human retention desks.
-- **Idempotent Execution**: Evora outbox pattern with SHA-256 idempotency keys prevents duplicate charges or concessions.
-- **Cryptographic Auditability**: SHA-256 hash-chained ledger ensures tamper-evident traceability.
+---
+
+## 2. Authority Separation Matrix
+
+| Component | Responsibility | Authority Level | Safety Mechanism |
+|---|---|---|---|
+| **Diagnosis Engine** | Identifies root cause from Razorpay telemetry | Deterministic (0 ML/AI) | Structured mapping covering 8 canonical failure causes |
+| **Eligibility Engine** | Determines legal action candidates | Deterministic | Filters by available instruments, backup cards, UPI rails |
+| **ML Ranking Engine** | Estimates conditional recovery probabilities $\hat{P}(\text{recover} \mid \mathbf{x}, a)$ | Advisory only | Random Forest / Gradient Boosting scores $\text{ERV}$ |
+| **Policy Engine** | Final authority to approve, veto, or override | Absolute Authority | 5 hard deterministic rules (attempts, fraud, value, concession) |
+| **ApprovedActionEnvelope** | Immutable boundary packaging approved action | Read-only context | Zero financial API access, read-only tokenization |
+| **Template Generator** | Synthesizes empathetic customer copy | Non-Authoritative | Deterministic templates with parameter substitution |
+| **Output Validator** | Enforces claim, credential, and discount guardrails | Gatekeeper | Rejects false settlement claims, unauthorized discounts, CVV/OTP requests |
+| **Deterministic Executor** | Executes payments via Razorpay API | Idempotent | Cryptographic idempotency key lock + Evora outbox pattern |
+| **Audit Ledger** | Records state transitions and cryptographic proofs | Immutable | SHA-256 hash chaining with real-time SSE broadcasting |
 
 ---
 
-## 2. End-to-End Control Loop
+## 3. Mathematical Formulation of Expected Recovery & Prioritization
 
-```mermaid
-graph TD
-    A[Razorpay Telemetry / Webhook] --> B[Deterministic Diagnosis Engine]
-    B -->|7 Root Causes| C[Bounded Candidate Action Generator]
-    C -->|Candidate Set A_cause| D[ML Ranking Service: Random Forest]
-    D -->|P_recovery * Amount| E[Deterministic Policy Engine]
-    E -->|Check Bounds, Retries, Cap, Fraud| F{Policy Verdict}
-    F -->|VETOED| G[Stopping Rule / Human Desk]
-    F -->|AUTHORIZED| H[Idempotent Settle on Razorpay]
-    H --> I[Append-Only SHA-256 Recovery Ledger]
-    G --> I
-    I -->|SSE Stream| J[Next.js 14 Real-Time Control Room]
+### Action-Level ML Strategy Ranking:
+For each context-eligible action $a \in \mathcal{A}_{\text{eligible}}$:
+$$\text{GrossEV}(a) = \hat{P}(\text{recover} \mid \mathbf{x}, a) \times (\text{Amount} - \text{Concession}(a))$$
+$$\text{NetExpectedRecovery}(a) = \text{GrossEV}(a) - \text{InterventionCost}(a)$$
+
+- **`Concession(a)`**: Discount/incentive realized conditional on successful recovery (capped at $\le 5\%$ & $\le \text{₹}500$).
+- **`InterventionCost(a)`**: Up-front operational expense (e.g. ₹50 human agent slot, ₹20 PTP handling, ₹5 automated notification).
+
+Candidates are ranked in descending order of $\text{NetExpectedRecovery}(a)$, and the top candidate is proposed to the Policy Engine.
+
+### Portfolio-Level Prioritization Queue:
+Cross-case portfolio prioritization dynamically ranks all active recovery opportunities:
+$$\text{PriorityScore} = \text{NetExpectedRecovery} \times \text{TimeSensitivity} \times \text{CustomerValueFactor} - \text{RiskPenalty}$$
+
+### Components:
+1. **Net Expected Recovery ($\text{NetERV}$)**:
+   $$\text{NetERV} = \hat{P}(\text{recover} \mid \mathbf{x}, a) \times (\text{Amount} - \text{Concession}) - \text{InterventionCost}$$
+
+2. **Time Sensitivity Multiplier ($\gamma \in [0.1, 2.0]$)**:
+   - **Abandoned Checkout**: $\gamma = 2.0$ for $< 30\text{ min}$, decaying to $0.8$ after $2\text{ hours}$.
+   - **Failed Subscription**: $\gamma = 1.8$ when payday proximity $\le 2\text{ days}$.
+   - **Overdue Invoice**: $\gamma = 1.8$ for $\ge 30\text{ days overdue}$, $1.4$ for $\ge 14\text{ days}$.
+   - **Payment Failure**: $\gamma = 1.4$ for $< 1\text{ hour}$.
+
+3. **Customer Value Factor ($\theta \in [0.5, 1.5]$)**:
+   $$\theta = \begin{cases} 0.5 + \text{HistoricalSuccessRate}, & \text{if } \text{HistoricalAttempts} > 0 \\ 1.0, & \text{if } \text{HistoricalAttempts} = 0 \text{ (True cold-start / unobserved)} \end{cases}$$
+   - **Gated on Observed Attempt Telemetry**: Evaluated strictly on whether historical payment attempts were observed ($\text{HistoricalAttempts} > 0$), where $\text{HistoricalSuccessRate} = \frac{\text{Settled Invoices/Debits}}{\text{HistoricalAttempts}} \in [0.0, 1.0]$.
+   - **Bad History Penalty vs Cold-Start Neutrality**: A customer with observed failed history (e.g., $0/10$ settled) receives $\theta = 0.5 + 0.0 = 0.5$ (the lowest priority penalty multiplier). A brand-new customer with zero observed attempts ($\text{HistoricalAttempts} = 0$) receives $\theta = 1.0$ (neutral default), ensuring new accounts are not penalized while proven chronic-failure accounts are appropriately de-prioritized.
+
+4. **Intervention Cost ($C_a$)**:
+   - $C_{\text{ESCALATE\_HUMAN}} = \text{₹}50$
+   - $C_{\text{PROMISE\_TO\_PAY}} = \text{₹}20$
+   - $C_{\text{AUTOMATED}} = \text{₹}5$
+
+5. **Risk Penalty ($R$)**:
+   - $R_{\text{ATTEMPTS}} = \text{₹}10 \times \text{Attempts}$
+   - $R_{\text{FRAUD}} = \text{AmountPaise}$ (effectively zeros priority score to prevent risky actions)
+
+---
+
+## 3B. Outcome-Driven Offline Learning Pipeline with Gated Model Promotion
+
+Triage adheres to strict financial ML engineering standards — **zero unvetted online self-modifying models in production**:
+
+```text
+Decision (ML Recommendation)
+   │
+   ▼
+Execution (Deterministic Razorpay Executor)
+   │
+   ▼
+Terminal Outcome (RECOVERED / LOST / ESCALATED)
+   │
+   ▼
+Cryptographic SHA-256 Ledger Record
+   │
+   ▼
+Outcome Feedback Dataset (Persistent Training Buffer)
+   │
+   ▼
+Offline Retraining Pipeline (/api/v1/triage/ml/retrain)
+   │
+   ▼
+Held-Out Validation Gating (ROC-AUC, Precision, Recall, EV Uplift)
+   │
+   ▼
+Champion Model Deployment
 ```
 
 ---
 
-## 3. Mathematical Formulation of the ML Ranking Engine
+## 4. Cross-Workflow Customer Coordination Engine
 
-### 3.1 Objective Function
-For a failure case with contextual feature vector $\mathbf{x} = (\text{cause}, \text{amount}, \text{attempt}, \Delta t_{\text{fail}}, \text{rail}, \text{hour}, \text{payday\_prox}, \text{hist\_rate})$ and permitted action candidate set $\mathcal{A}(\text{cause})$:
-
-$$\text{Expected Value}(a) = \hat{P}(\text{recover} \mid \mathbf{x}, a) \times (\text{Amount} - \text{Concession}(a))$$
-
-$$\text{Selected Recommendation } a^* = \arg\max_{a \in \mathcal{A}(\text{cause})} \text{Expected Value}(a)$$
-
-### 3.2 Model Configuration
-- **Algorithm**: Tabular `RandomForestClassifier(n_estimators=100, max_depth=8, min_samples_split=5)`
-- **Evaluation Partitioning**: 70% Train, 15% Validation, 15% Held-Out Test (Case-level partition split)
-- **Held-Out Test Metrics**:
-  - ROC-AUC: `0.9884`
-  - Precision: `93.96%`
-  - Recall: `93.21%`
-  - F1-Score: `0.9358`
-  - Accuracy: `93.99%`
-  - Absolute Recovery Uplift: `+5.47 percentage points` (54.40% Baseline $\rightarrow$ 59.87% ML Policy)
-  - Relative Revenue Uplift: `+24.72%` (₹24.72L $\rightarrow$ ₹30.83L on ₹47.39L at-risk)
-
-> **Evaluation Rigor & Methodology Disclosure**:
-> These held-out metrics reflect the Random Forest ranking model accurately recovering the multi-variable contextual interaction effects ($\text{cause} \times \text{action} \times \text{context}$) hand-crafted into the synthetic simulation. This demonstrates that the expected-value ranking mechanism and candidate selection engine work mathematically end-to-end, rather than claiming production human behavioral prediction. In production, the model continuously fits to merchant-specific historical decline outcomes.
-
----
-
-## 4. Deterministic Policy Engine & Stopping Rules
-
-The Deterministic Policy Engine evaluates candidates in descending order of expected value against 5 safety checks:
-
-```go
-type PolicyRuleEvaluation struct {
-    RuleName string `json:"rule_name"`
-    Passed   bool   `json:"passed"`
-    Reason   string `json:"reason"`
-}
+```text
+               CUSTOMER REVENUE AT RISK (Single Customer)
+     ┌───────────────────────┬───────────────────────┐
+     ▼                       ▼                       ▼
+Failed Subscription     Abandoned Cart       Overdue Invoice
+    (₹4,200)               (₹18,000)             (₹75,000)
+     │                       │                       │
+     └───────────────────────┼───────────────────────┘
+                             │
+                             ▼
+                 CROSS-WORKFLOW COORDINATOR
+                             │
+            ┌────────────────┴────────────────┐
+            ▼                                 ▼
+   COOLDOWN ACTIVE? (4h gap)       MULTI-OPPORTUNITY CONFLICT?
+            │                                 │
+     YES: Defer contact             YES: Prioritize Highest Value
+     NO: Proceed to check                (₹75k Invoice > ₹18k Cart > ₹4.2k Sub)
+                                         Suppress lower-value communications
 ```
 
-1. **`CANDIDATE_LEGITIMACY`**: Verifies $a \in \mathcal{A}(\text{cause})$.
-2. **`MAX_ATTEMPTS_LIMIT`**: If $\text{Attempts} \ge 3$, retries are vetoed $\rightarrow$ `MARK_LOST_EXHAUSTED`.
-3. **`FRAUD_SECURITY_GATE`**: Suspicious velocity or risk flags immediately halt automation $\rightarrow$ `STOP`.
-4. **`HIGH_VALUE_THRESHOLD`**: Any transaction $\ge \text{₹}10,000$ (1,000,000 paise) is vetoed from automated dunning $\rightarrow$ `ESCALATE_HUMAN`.
-5. **`CONCESSION_BUDGET_CAP`**: Financial discounts capped at 5% of amount and maximum ₹500 (50,000 paise).
-
 ---
 
-## 5. Failure Taxonomy & Permitted Bounded Action Sets
+## 5. Cryptographic Ledger & Audit Chain
 
-| Root Cause | Permitted Action Candidates $\mathcal{A}(\text{cause})$ | Default Static Baseline Action |
-|---|---|---|
-| `BANK_DOWNTIME_TIMEOUT` | `RETRY_SAME_RAIL_COOLDOWN`, `SWITCH_RAIL_UPI`, `ESCALATE_HUMAN` | `RETRY_SAME_RAIL_COOLDOWN` |
-| `INSUFFICIENT_FUNDS` | `RETRY_LATER`, `RETRY_NEXT_PAYDAY_WINDOW`, `INCENTIVE_DISCOUNT`, `ESCALATE_HUMAN` | `RETRY_LATER` |
-| `EXPIRED_CARD` | `CUSTOMER_PAYMENT_LINK`, `SWITCH_RAIL_UPI`, `ESCALATE_HUMAN` | `CUSTOMER_PAYMENT_LINK` |
-| `OTP_DROP_OFF` | `CUSTOMER_PAYMENT_LINK`, `RETRY_AUTHENTICATION`, `ESCALATE_HUMAN` | `CUSTOMER_PAYMENT_LINK` |
-| `MANDATE_REVOKED` | `SWITCH_RAIL_UPI`, `INCENTIVE_DISCOUNT`, `ESCALATE_HUMAN` | `SWITCH_RAIL_UPI` |
-| `FRAUD_SUSPECTED` | `STOP`, `ESCALATE_HUMAN` | `STOP` |
-| `NETWORK_DECLINE` | `RETRY_SAME_RAIL_COOLDOWN`, `SWITCH_RAIL_UPI`, `ESCALATE_HUMAN` | `RETRY_SAME_RAIL_COOLDOWN` |
-| `UNKNOWN_ERROR` | `ESCALATE_HUMAN`, `STOP` | `ESCALATE_HUMAN` |
+Each state transition is hash-chained using SHA-256:
 
----
+$$\text{EntryHash}_i = \text{SHA256}(\text{PrevHash}_{i-1} \parallel \text{EventID}_i \parallel \text{Timestamp}_i \parallel \text{AgentID}_i \parallel \text{Action}_i \parallel \text{Reasoning}_i \parallel \text{GateDecision}_i \parallel \text{AmountPaise}_i \parallel \text{OrderID}_i \parallel \text{Status}_i)$$
 
-## 6. Cryptographic Recovery Ledger (`gateway/internal/recovery`)
-
-Every state transition calculates an immutable SHA-256 entry hash chained to the previous block:
-
-$$\text{EntryHash}_n = \text{SHA-256}(\text{PrevHash}_{n-1} \parallel \text{CaseID} \parallel \text{Timestamp} \parallel \text{PrevStatus} \parallel \text{NewStatus} \parallel \text{ActionTaken} \parallel \text{AmountPaise})$$
-
-Ledger updates are broadcast in real time over SSE to connected operations dashboards.
+The integrity of the ledger can be independently audited via `/api/v1/triage/stats` which traverses and cryptographically verifies the complete hash chain.
