@@ -314,6 +314,34 @@ func (m *Manager) SaveCase(c *Case, actionTaken, reasoning string) {
 	go m.broadcast(entry)
 }
 
+// LogEvent appends a general system audit event to the cryptographic ledger
+func (m *Manager) LogEvent(actionTaken, reasoning string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC()
+	entry := LogEntry{
+		ID:             fmt.Sprintf("log_%d", now.UnixNano()),
+		CaseID:         "SYSTEM",
+		Timestamp:      now,
+		PreviousStatus: "SYSTEM_ACTIVE",
+		NewStatus:      "SYSTEM_ACTIVE",
+		ActionTaken:    actionTaken,
+		Reasoning:      reasoning,
+		AmountPaise:    0,
+		AmountINR:      0,
+		Currency:       "INR",
+		IdempotencyKey: fmt.Sprintf("sys_%d", now.UnixNano()),
+		PrevHash:       m.lastHash,
+	}
+
+	entry.EntryHash = m.calculateHash(entry)
+	m.lastHash = entry.EntryHash
+	m.log = append(m.log, entry)
+
+	go m.broadcast(entry)
+}
+
 func (m *Manager) calculateHash(e LogEntry) string {
 	h := sha256.New()
 	h.Write([]byte(e.PrevHash))

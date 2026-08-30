@@ -33,6 +33,7 @@ type Decision struct {
 	MLRecommendation     string                 `json:"ml_recommendation,omitempty"`
 	MLProbability        float64                `json:"ml_probability,omitempty"`
 	MLExpectedValuePaise int64                  `json:"ml_expected_value_paise,omitempty"`
+	ShadowBandit         *mlclient.ShadowBanditReport `json:"shadow_bandit,omitempty"`
 	MaxAttempts          int                    `json:"max_attempts"`
 	CurrentAttempt       int                    `json:"current_attempt"`
 }
@@ -234,6 +235,7 @@ func (s *Selector) SelectIntervention(
 			MLRecommendation:     topCandidate.Action,
 			MLProbability:        topCandidate.Probability,
 			MLExpectedValuePaise: topCandidate.ExpectedValuePaise,
+			ShadowBandit:         rankResp.ShadowBandit,
 			IsStoppingRuleHit:    true,
 			StoppingReason:       vetoReason,
 			MaxAttempts:          s.MaxAttemptsDefault,
@@ -290,6 +292,7 @@ func (s *Selector) SelectIntervention(
 		MLRecommendation:     topCandidate.Action,
 		MLProbability:        topCandidate.Probability,
 		MLExpectedValuePaise: topCandidate.ExpectedValuePaise,
+		ShadowBandit:         rankResp.ShadowBandit,
 		IsStoppingRuleHit:    false,
 		MaxAttempts:          s.MaxAttemptsDefault,
 		CurrentAttempt:       nextAttempt,
