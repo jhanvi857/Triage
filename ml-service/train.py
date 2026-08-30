@@ -46,37 +46,36 @@ CAUSES = [
 ACTIONS_BY_CAUSE = {
     "BANK_DOWNTIME_TIMEOUT": [
         "RETRY_SAME_RAIL_COOLDOWN",
-        "SWITCH_RAIL_UPI",
+        "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
         "ESCALATE_HUMAN",
     ],
     "INSUFFICIENT_FUNDS": [
-        "RETRY_LATER",
+        "SWITCH_TO_SAVED_CARD",
         "RETRY_NEXT_PAYDAY_WINDOW",
-        "INCENTIVE_DISCOUNT",
+        "PROMISE_TO_PAY",
         "ESCALATE_HUMAN",
     ],
     "EXPIRED_CARD": [
-        "SWITCH_RAIL_UPI",
-        "CUSTOMER_PAYMENT_LINK",
+        "UPDATE_PAYMENT_METHOD",
         "ESCALATE_HUMAN",
     ],
     "OTP_DROP_OFF": [
-        "RETRY_AUTHENTICATION",
-        "CUSTOMER_PAYMENT_LINK",
+        "RESUME_CHECKOUT",
+        "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
         "ESCALATE_HUMAN",
     ],
     "MANDATE_REVOKED": [
-        "INCENTIVE_DISCOUNT",
-        "SWITCH_RAIL_UPI",
+        "REAUTHORIZE_MANDATE",
+        "COLLECT_OUTSTANDING_PAYMENT",
         "ESCALATE_HUMAN",
     ],
     "FRAUD_SUSPECTED": [
-        "ESCALATE_HUMAN",
         "STOP",
+        "ESCALATE_HUMAN",
     ],
     "NETWORK_DECLINE": [
         "RETRY_SAME_RAIL_COOLDOWN",
-        "SWITCH_RAIL_UPI",
+        "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
         "ESCALATE_HUMAN",
     ],
     "UNKNOWN_ERROR": [
@@ -110,24 +109,25 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
 
     # 2. INSUFFICIENT_FUNDS interactions
     if cause == "INSUFFICIENT_FUNDS":
-        if action == "RETRY_LATER":
+        if action == "SWITCH_TO_SAVED_CARD":
+            if hist_rate >= 0.6:
+                return min(0.88, 0.76 + 0.12 * (hist_rate - 0.5))
+            return 0.70
+        elif action in ["RETRY_NEXT_PAYDAY_WINDOW", "RETRY_LATER"]:
             if payday_prox <= 2:
-                return min(0.90, 0.82 + 0.08 * (hist_rate - 0.5))
+                return min(0.92, 0.84 + 0.08 * (hist_rate - 0.5))
             elif payday_prox <= 5:
-                return 0.55
+                return 0.62
             else:
-                return 0.31
-        elif action == "RETRY_NEXT_PAYDAY_WINDOW":
-            if payday_prox <= 2:
-                return min(0.88, 0.80 + 0.08 * (hist_rate - 0.5))
-            elif payday_prox <= 5:
-                return 0.58
-            else:
-                return 0.35
+                return 0.32
+        elif action == "PROMISE_TO_PAY":
+            if payday_prox >= 6:
+                return min(0.82, 0.74 + 0.10 * (hist_rate - 0.5))
+            return 0.48
         elif action == "INCENTIVE_DISCOUNT":
             if payday_prox >= 6 and amount <= 600000:
-                return min(0.82, 0.67 + 0.10 * (hist_rate - 0.5))
-            return 0.43
+                return min(0.80, 0.65 + 0.10 * (hist_rate - 0.5))
+            return 0.40
         elif action == "ESCALATE_HUMAN":
             if amount >= 1000000 or attempt >= 2:
                 return 0.65
@@ -136,18 +136,16 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
     # 3. BANK_DOWNTIME_TIMEOUT interactions
     elif cause == "BANK_DOWNTIME_TIMEOUT":
         if action == "RETRY_SAME_RAIL_COOLDOWN":
-            # If outage is fresh (<2h), bank recovery on same rail is very high after cooldown
             if time_since_failure <= 2.0 and attempt == 1:
                 return 0.86
             elif time_since_failure <= 4.0:
                 return 0.55
             else:
-                return 0.30
-        elif action == "SWITCH_RAIL_UPI":
-            # If bank downtime has persisted, switching rail is significantly superior
+                return 0.25
+        elif action in ["SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"]:
             if time_since_failure > 2.0 or attempt >= 2:
-                return 0.78
-            return 0.45
+                return 0.80
+            return 0.48
         elif action == "ESCALATE_HUMAN":
             if amount >= 1000000:
                 return 0.70
@@ -155,34 +153,28 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
 
     # 4. EXPIRED_CARD interactions
     elif cause == "EXPIRED_CARD":
-        if action == "SWITCH_RAIL_UPI":
-            # Strong recovery for digital/UPI native users
-            if rail in ["CARD", "UPI"] and hist_rate >= 0.5:
-                return min(0.88, 0.76 + 0.12 * hist_rate)
+        if action == "UPDATE_PAYMENT_METHOD":
+            if hist_rate >= 0.5:
+                return min(0.90, 0.82 + 0.08 * hist_rate)
+            return 0.75
+        elif action in ["SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"]:
             return 0.60
-        elif action == "CUSTOMER_PAYMENT_LINK":
-            if amount >= 800000:
-                return 0.68
-            return 0.55
         elif action == "ESCALATE_HUMAN":
             if amount >= 1000000:
-                return 0.62
-            return 0.15
+                return 0.65
+            return 0.20
 
     # 5. OTP_DROP_OFF interactions
     elif cause == "OTP_DROP_OFF":
-        if action == "RETRY_AUTHENTICATION":
-            # Instant WhatsApp / SMS nudge works best during daytime (9am - 8pm) and immediately
+        if action in ["RESUME_CHECKOUT", "RETRY_AUTHENTICATION"]:
             if 9 <= hour <= 20 and time_since_failure <= 1.0:
-                return 0.84
+                return 0.88
             elif 9 <= hour <= 20:
-                return 0.60
+                return 0.68
             else:
-                return 0.32  # Night time message is ignored
-        elif action == "CUSTOMER_PAYMENT_LINK":
-            if hour < 9 or hour > 20:
-                return 0.66  # Asynchronous email/link is checked in the morning
-            return 0.52
+                return 0.40
+        elif action in ["SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"]:
+            return 0.75
         elif action == "ESCALATE_HUMAN":
             if amount >= 1000000:
                 return 0.58
@@ -190,14 +182,22 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
 
     # 6. MANDATE_REVOKED interactions
     elif cause == "MANDATE_REVOKED":
-        if action == "INCENTIVE_DISCOUNT":
+        if action == "REAUTHORIZE_MANDATE":
+            if amount <= 800000:
+                return 0.74
+            return 0.55
+        elif action in ["COLLECT_OUTSTANDING_PAYMENT", "CORPORATE_INVOICE"]:
+            if amount >= 500000:
+                return 0.72
+            return 0.60
+        elif action in ["SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"]:
+            if amount <= 800000:
+                return 0.55
+            return 0.35
+        elif action == "INCENTIVE_DISCOUNT":
             if amount <= 500000:
                 return 0.64
             return 0.38
-        elif action == "SWITCH_RAIL_UPI":
-            if amount <= 800000:
-                return 0.52
-            return 0.35
         elif action == "ESCALATE_HUMAN":
             if amount >= 800000:
                 return 0.75
@@ -206,7 +206,7 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
     # 7. FRAUD_SUSPECTED interactions
     elif cause == "FRAUD_SUSPECTED":
         if action == "ESCALATE_HUMAN":
-            return 0.40  # Risk officer manual clearance
+            return 0.40
         elif action == "STOP":
             return 0.0
         return 0.0
@@ -215,7 +215,7 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
     elif cause == "NETWORK_DECLINE":
         if action == "RETRY_SAME_RAIL_COOLDOWN":
             return 0.76
-        elif action == "SWITCH_RAIL_UPI":
+        elif action in ["SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"]:
             return 0.68
         elif action == "ESCALATE_HUMAN":
             return 0.20
