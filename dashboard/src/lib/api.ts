@@ -1,4 +1,14 @@
-import { TriageCase, SummaryStats, BatchResult, PTPParseResult, MLMetrics } from "./types";
+import {
+  TriageCase,
+  SummaryStats,
+  BatchResult,
+  PTPParseResult,
+  MLMetrics,
+  BenchmarkReport,
+  RetrainSummary,
+  PortfolioPlan,
+  ForecastReport,
+} from "./types";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8080";
 
@@ -96,6 +106,75 @@ export async function fetchMLMetrics(): Promise<MLMetrics | null> {
     return await res.json();
   } catch (err) {
     console.error("fetchMLMetrics error:", err);
+    return null;
+  }
+}
+
+export async function fetchBenchmarkReport(): Promise<BenchmarkReport | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/ml/benchmark`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("fetchBenchmarkReport error:", err);
+    return null;
+  }
+}
+
+export async function triggerRetraining(outcomes: any[] = []): Promise<RetrainSummary | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/ml/retrain`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ outcomes }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("triggerRetraining error:", err);
+    return null;
+  }
+}
+
+export async function fetchRetrainHistory(): Promise<RetrainSummary[]> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/ml/retrain/history`, { cache: "no-store" });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error("fetchRetrainHistory error:", err);
+    return [];
+  }
+}
+
+export async function fetchPortfolioPlan(
+  discountBudgetLimitPaise: number = 500000,
+  humanDeskCapacity: number = 5
+): Promise<PortfolioPlan | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/portfolio/allocate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        discount_budget_limit_paise: discountBudgetLimitPaise,
+        human_desk_capacity: humanDeskCapacity,
+      }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("fetchPortfolioPlan error:", err);
+    return null;
+  }
+}
+
+export async function fetchRevenueForecast(): Promise<ForecastReport | null> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/v1/triage/forecast`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("fetchRevenueForecast error:", err);
     return null;
   }
 }

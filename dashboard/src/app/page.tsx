@@ -13,6 +13,7 @@ import { RecoveryPipelineView } from "../components/RecoveryPipelineView";
 import { PaymentsRailView } from "../components/PaymentsRailView";
 import { CustomerMatrixView } from "../components/CustomerMatrixView";
 import { AnalyticsUpliftView } from "../components/AnalyticsUpliftView";
+import { PortfolioAllocatorView } from "../components/PortfolioAllocatorView";
 import { ExceptionsQueueView } from "../components/ExceptionsQueueView";
 import {
   fetchCases,
@@ -351,7 +352,12 @@ export default function RevenueControlPage() {
                 />
               )}
 
-              {/* 4. EVALUATION TAB (EXCLUSIVELY FOR SYNTHETIC MODEL EVALUATION) */}
+              {/* 4. PORTFOLIO ALLOCATOR TAB (KNAPSACK OPTIMIZATION) */}
+              {activeTab === "ALLOCATOR" && (
+                <PortfolioAllocatorView />
+              )}
+
+              {/* 5. EVALUATION TAB (EXCLUSIVELY FOR SYNTHETIC MODEL EVALUATION) */}
               {activeTab === "EVALUATION" && (
                 <AnalyticsUpliftView
                   stats={stats}

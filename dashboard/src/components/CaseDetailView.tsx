@@ -18,9 +18,11 @@ import {
   HelpCircle,
   AlertTriangle,
   Flame,
+  Compass,
 } from "lucide-react";
 import { TriageCase, PTPParseResult } from "../lib/types";
 import { parsePTP } from "../lib/api";
+import { ShadowBanditModal } from "./ShadowBanditModal";
 
 interface CaseDetailViewProps {
   caseItem: TriageCase;
@@ -39,6 +41,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
   const [ptpInput, setPtpInput] = useState<string>("");
   const [ptpResult, setPtpResult] = useState<PTPParseResult | null>(caseItem.ptp_status || null);
   const [isParsingPtp, setIsParsingPtp] = useState<boolean>(false);
+  const [isShadowBanditOpen, setIsShadowBanditOpen] = useState<boolean>(false);
 
   const handleExecute = async () => {
     setIsExecuting(true);
@@ -201,9 +204,21 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
         {/* ML Action Ranking */}
         <div>
           <div className="flex items-center justify-between pb-2 border-b border-[#E2E5E5]">
-            <h2 className="font-semibold text-[16px] text-[#202525]">
-              ML Action Ranking
-            </h2>
+            <div className="flex items-center space-x-2">
+              <h2 className="font-semibold text-[16px] text-[#202525]">
+                ML Action Ranking
+              </h2>
+              {caseItem.intervention?.shadow_bandit && (
+                <button
+                  onClick={() => setIsShadowBanditOpen(true)}
+                  className="flex items-center space-x-1 text-[11px] font-mono font-semibold text-[#087F83] bg-[#E6F4F1] hover:bg-[#D1EAE5] px-2 py-0.5 rounded border border-[#B2DFDB] transition-colors cursor-pointer"
+                  title="Inspect Contextual Shadow Bandit Exploration"
+                >
+                  <Compass className="w-3 h-3 text-[#087F83]" />
+                  <span>Shadow Bandit</span>
+                </button>
+              )}
+            </div>
             <span className="font-mono text-[11px] font-semibold text-[#6F7777]">
               P(Recovery) &times; Expected Value
             </span>
@@ -490,6 +505,14 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Shadow Bandit Exploration Modal */}
+      <ShadowBanditModal
+        isOpen={isShadowBanditOpen}
+        onClose={() => setIsShadowBanditOpen(false)}
+        report={caseItem.intervention?.shadow_bandit}
+        caseId={caseItem.id}
+      />
     </div>
   );
 };

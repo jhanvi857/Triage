@@ -27,6 +27,28 @@ export interface RankedCandidate {
   reasoning: string;
 }
 
+export interface ArmEvaluation {
+  action: string;
+  ml_probability: number;
+  expected_value_inr: number;
+  exploration_bonus: number;
+  ucb_score: number;
+  pull_count: number;
+}
+
+export interface ShadowBanditReport {
+  mode: string;
+  production_action: string;
+  shadow_action: string;
+  agreed_with_prod: boolean;
+  shadow_ev_inr: number;
+  production_ev_inr: number;
+  exploration_reason: string;
+  estimated_opportunity_cost_inr: number;
+  arm_evaluations?: ArmEvaluation[];
+  zero_execution_risk: boolean;
+}
+
 export interface PolicyRuleEvaluation {
   rule_name: string;
   passed: boolean;
@@ -53,8 +75,147 @@ export interface MLMetrics {
   recall: number;
   f1_score: number;
   accuracy: number;
+  p99_latency_ms?: number;
   absolute_uplift_pct_points: number;
   relative_uplift_pct: number;
+}
+
+export interface ModelComparisonStats {
+  model_key: string;
+  name: string;
+  type: string;
+  roc_auc: number;
+  precision: number;
+  recall: number;
+  f1_score: number;
+  accuracy: number;
+  log_loss: number;
+  train_time_ms: number;
+  p50_latency_ms: number;
+  p95_latency_ms: number;
+  p99_latency_ms: number;
+  recovered_inr: number;
+  recovery_rate_pct: number;
+  absolute_uplift_pct_points: number;
+  relative_uplift_pct: number;
+  action_distribution?: Record<string, number>;
+}
+
+export interface BenchmarkReport {
+  evaluated_at: string;
+  test_cases_count: number;
+  revenue_at_risk_inr: number;
+  static_baseline: {
+    name: string;
+    recovered_inr: number;
+    recovery_rate_pct: number;
+  };
+  models: Record<string, ModelComparisonStats>;
+  champion_model: string;
+  production_selected_model: string;
+  selection_rationale: string;
+}
+
+export interface RetrainMetricsDelta {
+  delta_roc_auc: number;
+  delta_f1_score: number;
+  delta_recovery_rate_pct_points: number;
+  delta_recovered_inr: number;
+}
+
+export interface RetrainSummary {
+  retrained_at: string;
+  feedback_samples_ingested: number;
+  total_training_samples: number;
+  held_out_test_cases: number;
+  revenue_at_risk_inr: number;
+  before_retrain: {
+    roc_auc: number;
+    f1_score: number;
+    accuracy?: number;
+    recovery_rate_pct: number;
+    recovered_inr: number;
+  };
+  after_retrain: {
+    roc_auc: number;
+    f1_score: number;
+    accuracy?: number;
+    recovery_rate_pct: number;
+    recovered_inr: number;
+  };
+  delta: RetrainMetricsDelta;
+  status: string;
+}
+
+export interface AllocationDecision {
+  case_id: string;
+  customer_name: string;
+  amount_paise: number;
+  amount_inr: number;
+  root_cause: string;
+  assigned_action: string;
+  resource_allocated: "DISCOUNT_BUDGET" | "HUMAN_DESK" | "ZERO_COST_FALLBACK" | string;
+  discount_spend_paise: number;
+  discount_spend_inr: number;
+  human_review_slots_used: number;
+  recovery_probability: number;
+  expected_value_inr: number;
+  ev_density: number;
+  allocation_rationale: string;
+  was_constrained: boolean;
+}
+
+export interface PortfolioPlan {
+  plan_id: string;
+  evaluated_at: string;
+  total_cases: number;
+  total_at_risk_paise: number;
+  total_at_risk_inr: number;
+  discount_budget_limit_paise: number;
+  discount_budget_limit_inr: number;
+  discount_budget_spent_paise: number;
+  discount_budget_spent_inr: number;
+  discount_budget_remaining_inr: number;
+  human_desk_capacity: number;
+  human_desk_slots_used: number;
+  human_desk_slots_remaining: number;
+  expected_recovered_paise: number;
+  expected_recovered_inr: number;
+  unconstrained_expected_inr: number;
+  static_baseline_expected_inr: number;
+  portfolio_roi_multiple: number;
+  cases_allocated_discount: number;
+  cases_allocated_human_desk: number;
+  cases_routed_zero_cost_fallback: number;
+  decisions: AllocationDecision[];
+  optimization_method: string;
+}
+
+export interface DayProjection {
+  date: string;
+  day_index: number;
+  expected_at_risk_inr: number;
+  expected_with_triage_inr: number;
+  expected_without_triage_inr: number;
+  net_incremental_gained_inr: number;
+  triage_recovery_pct: number;
+  baseline_recovery_pct: number;
+}
+
+export interface ForecastReport {
+  generated_at: string;
+  forecast_horizon_days: number;
+  total_7day_at_risk_inr: number;
+  total_7day_with_triage_inr: number;
+  total_7day_without_triage_inr: number;
+  net_7day_incremental_revenue_inr: number;
+  relative_revenue_uplift_pct: number;
+  average_daily_at_risk_inr: number;
+  daily_projections: DayProjection[];
+  methodology: string;
+  assumption_triage_recovery_pct: number;
+  assumption_baseline_recovery_pct: number;
+  honesty_disclosure: string;
 }
 
 export interface InterventionDecision {
@@ -74,6 +235,7 @@ export interface InterventionDecision {
   ml_recommendation?: string;
   ml_probability?: number;
   ml_expected_value_paise?: number;
+  shadow_bandit?: ShadowBanditReport;
   max_attempts: number;
   current_attempt: number;
 }

@@ -16,6 +16,7 @@ export type NavTab =
   | "OVERVIEW"
   | "RECOVERY"
   | "CASES"
+  | "ALLOCATOR"
   | "EVALUATION"
   | "AUDIT"
   | "PTP"
@@ -48,10 +49,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "RECOVERY", label: "Recovery Queue", icon: RotateCcw },
     { id: "CASES", label: "Pipeline", icon: Layers },
     {
+      id: "ALLOCATOR",
+      label: "Portfolio Allocator",
+      icon: SettingsIcon,
+      badge: "KNAPSACK",
+      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+    },
+    {
       id: "EVALUATION",
       label: "Evaluation",
       icon: BarChart3,
-      badge: "SYNTHETIC",
+      badge: "3-MODEL",
       badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
     },
     { id: "AUDIT", label: "Audit Ledger", icon: ShieldCheck },
