@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 )
 
 func main() {
+	loadDotEnv()
+
 	port := getEnv("PORT", "8080")
 	thresholdINR := getEnvInt64("MANUAL_APPROVAL_THRESHOLD_INR", 5000)
 	budgetCapINR := getEnvInt64("DEFAULT_BUDGET_CAP_INR", 10000)
@@ -22,6 +25,10 @@ func main() {
 	rzpKeyID := getEnv("RAZORPAY_KEY_ID", "mock")
 	rzpSecret := getEnv("RAZORPAY_KEY_SECRET", "")
 	rzpWebhookSecret := getEnv("RAZORPAY_WEBHOOK_SECRET", "")
+
+	smtpHost := getEnv("SMTP_HOST", "")
+	smtpPort := getEnv("SMTP_PORT", "587")
+	smtpUser := getEnv("SMTP_USER", "")
 
 	cfg := api.Config{
 		Port:                         port,
@@ -43,6 +50,11 @@ func main() {
 		modeStr = fmt.Sprintf("Live Razorpay Test Mode (Key: %s...)", rzpKeyID[:min(len(rzpKeyID), 8)])
 	}
 
+	mailerStatus := "Direct DNS MX Resolution (Set SMTP_HOST in .env for custom relay)"
+	if smtpHost != "" && smtpUser != "" {
+		mailerStatus = fmt.Sprintf("Authenticated SMTP Relay (%s:%s as %s)", smtpHost, smtpPort, smtpUser)
+	}
+
 	fmt.Println(`
    __    ____ ___   ____ ____ ___ 
   / /   / __// _ \ / ___// __// _ \
@@ -57,6 +69,7 @@ Built on Razorpay Test-Mode APIs & Token-Bucket Gating`)
 	fmt.Printf("[POLICY]  High-Value Threshold    : ₹%d (Requires Human Approval)\n", thresholdINR)
 	fmt.Printf("[STORAGE] Database Engine         : SQLite (%s)\n", dbPath)
 	fmt.Printf("[RAZORPAY] Integration Engine     : %s\n", modeStr)
+	fmt.Printf("[MAILER]  Email Delivery Engine   : %s\n", mailerStatus)
 	fmt.Printf("[SSE]     Audit Event Stream      : http://localhost:%s/api/v1/audit/stream\n", port)
 	fmt.Println("------------------------------------------------------------")
 
@@ -110,4 +123,29 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func loadDotEnv() {
+	paths := []string{".env", "../.env", "gateway/.env"}
+	for _, p := range paths {
+		content, err := os.ReadFile(p)
+		if err == nil {
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					k := strings.TrimSpace(parts[0])
+					v := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+					if os.Getenv(k) == "" {
+						os.Setenv(k, v)
+					}
+				}
+			}
+			return
+		}
+	}
 }

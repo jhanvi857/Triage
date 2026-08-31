@@ -33,6 +33,7 @@ type TriageServer struct {
 	Allocator     *allocator.PortfolioAllocator
 	Forecast      *forecast.Engine
 	NudgeAgent    *messaging.NudgeAgent
+	EmailService  *messaging.EmailService
 	Coordinator   *recovery.Coordinator
 	Scheduler     *recovery.Scheduler
 }
@@ -62,6 +63,7 @@ func NewTriageServer(diag *diagnosis.Engine, inter *intervention.Selector, mgr *
 		Allocator:     allocator.NewPortfolioAllocator(),
 		Forecast:      forecast.NewEngine(),
 		NudgeAgent:    messaging.NewNudgeAgent(),
+		EmailService:  messaging.NewEmailService(),
 		Coordinator:   coord,
 		Scheduler:     sched,
 	}
@@ -76,6 +78,7 @@ func (ts *TriageServer) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/triage/stream", ts.handleSSEStream)
 	mux.HandleFunc("/api/v1/triage/reset", ts.handleReset)
 	mux.HandleFunc("/api/v1/triage/ptp/parse", ts.handlePTPParse)
+	mux.HandleFunc("/api/v1/triage/email/send", ts.handleSendEmail)
 	mux.HandleFunc("/api/v1/triage/ml/metrics", ts.handleMLMetrics)
 	mux.HandleFunc("/api/v1/triage/ml/benchmark", ts.handleMLBenchmark)
 	mux.HandleFunc("/api/v1/triage/ml/retrain", ts.handleMLRetrain)
@@ -101,8 +104,12 @@ func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, i
 	}
 
 	email, _ := entity["email"].(string)
-	if email == "" {
-		email = "demo-customer@example.com"
+	if email == "" || email == "demo-customer@example.com" || email == "storefront-demo@example.com" {
+		if ts.EmailService.SMTPUser != "" {
+			email = ts.EmailService.SMTPUser
+		} else {
+			email = "jhanvip8507@gmail.com"
+		}
 	}
 	amtF, _ := entity["amount"].(float64)
 	desc, _ := entity["description"].(string)
@@ -115,6 +122,10 @@ func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, i
 	now := time.Now().UTC()
 	uniqueNum := atomic.AddInt64(&caseCounter, 1)
 	caseID := fmt.Sprintf("CASE-%04d", uniqueNum)
+	paydayProx := 10
+	if errCode == "INSUFFICIENT_FUNDS" || errReason == "insufficient_funds" || strings.Contains(strings.ToLower(errDesc), "balance") {
+		paydayProx = 1
+	}
 
 	c := &recovery.Case{
 		ID:                    caseID,
@@ -131,7 +142,7 @@ func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, i
 		ErrorReason:           errReason,
 		ErrorSource:           errSrc,
 		ErrorStep:             errStep,
-		PaydayProximityDays:   10,
+		PaydayProximityDays:   paydayProx,
 		HistoricalSuccessRate: 0.75,
 		Status:                recovery.StatusNew,
 		Source:                "LIVE",
@@ -198,6 +209,41 @@ func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, i
 
 	actionMsg := fmt.Sprintf("ML proposed '%s' (%.1f%%, EV: ₹%.2f). Policy verdict: %s", decision.MLRecommendation, decision.MLProbability*100.0, float64(decision.MLExpectedValuePaise)/100.0, decision.PolicyVerdict)
 	ts.RecoveryMgr.SaveCase(c, "INTERVENTION_EVALUATED", actionMsg)
+
+	// AUTOMATIC PROACTIVE EMAIL DISPATCH: Send customer recovery statement & link immediately in background
+	if ts.EmailService != nil && c.CustomerEmail != "" {
+		caseCopy := *c
+		go func(c recovery.Case) {
+			recoveryURL := fmt.Sprintf("http://localhost:5173/status/%s?action=complete_recovery", c.ID)
+			reason := c.ErrorDesc
+			if c.Diagnosis != nil && c.Diagnosis.CustomerFacingMsg != "" {
+				reason = c.Diagnosis.CustomerFacingMsg
+			}
+			if c.Status == recovery.StatusEscalated || (c.Intervention != nil && c.Intervention.PolicyVerdict == "VETOED") {
+				recoveryURL = fmt.Sprintf("http://localhost:5173/status/%s", c.ID)
+				ts.EmailService.SendEscalationEmail(
+					c.CustomerEmail,
+					c.CustomerName,
+					c.ID,
+					c.PlanName,
+					float64(c.AmountPaise)/100.0,
+					reason,
+					recoveryURL,
+				)
+			} else {
+				ts.EmailService.SendStatementEmail(
+					c.CustomerEmail,
+					c.CustomerName,
+					c.ID,
+					c.PlanName,
+					float64(c.AmountPaise)/100.0,
+					reason,
+					recoveryURL,
+				)
+			}
+		}(caseCopy)
+	}
+
 	return c
 }
 
@@ -256,13 +302,26 @@ func (ts *TriageServer) handleCases(w http.ResponseWriter, r *http.Request) {
 			custID = fmt.Sprintf("cust_%s", strings.TrimPrefix(caseID, "CASE-"))
 		}
 
+		custEmail := req.CustomerEmail
+		if custEmail == "" || custEmail == "demo-customer@example.com" || custEmail == "storefront-demo@example.com" {
+			if ts.EmailService.SMTPUser != "" {
+				custEmail = ts.EmailService.SMTPUser
+			} else {
+				custEmail = "jhanvip8507@gmail.com"
+			}
+		}
+
 		srcType := req.SourceType
 		if srcType == "" {
 			srcType = recovery.SourceFailedPayment
 		}
 
 		if req.PaydayProximityDays <= 0 {
-			req.PaydayProximityDays = 10
+			if req.ErrorCode == "INSUFFICIENT_FUNDS" || req.ErrorReason == "insufficient_funds" || strings.Contains(strings.ToLower(req.ErrorDesc), "balance") {
+				req.PaydayProximityDays = 1
+			} else {
+				req.PaydayProximityDays = 10
+			}
 		}
 		if req.HistoricalSuccess <= 0 {
 			req.HistoricalSuccess = 0.75
@@ -270,10 +329,10 @@ func (ts *TriageServer) handleCases(w http.ResponseWriter, r *http.Request) {
 
 		c := &recovery.Case{
 			ID:                        caseID,
-			CustomerID:                custID,
-			CustomerName:              req.CustomerName,
-			CustomerEmail:             req.CustomerEmail,
-			PlanName:                  req.PlanName,
+			CustomerID:            custID,
+			CustomerName:          req.CustomerName,
+			CustomerEmail:         custEmail,
+			PlanName:              req.PlanName,
 			SourceType:                srcType,
 			AmountPaise:               req.AmountPaise,
 			AmountINR:                 float64(req.AmountPaise) / 100.0,
@@ -444,6 +503,12 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 
 	// POST /api/v1/triage/cases/:id/advance
 	if len(parts) == 2 && parts[1] == "advance" && r.Method == http.MethodPost {
+		var advanceReq struct {
+			Outcome string `json:"outcome"` // "SUCCESS", "FAILURE", "DECLINED"
+			Reason  string `json:"reason"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&advanceReq)
+
 		switch c.Status {
 		case recovery.StatusNew:
 			// Step 1: Deterministic Diagnosis
@@ -527,25 +592,134 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 					c.RecoveryPlan.Escalate(c.Intervention.StoppingReason)
 				}
 				ts.RecoveryMgr.SaveCase(c, "ESCALATED_TO_HUMAN", fmt.Sprintf("Stopping rule enforced: %s", c.Intervention.StoppingReason))
-			} else {
-				c.Status = recovery.StatusRecovered
-				c.RecoveredAmountPaise = c.AmountPaise
-				c.RazorpayPaymentID = fmt.Sprintf("pay_tri_%s", strings.TrimPrefix(c.ID, "CASE-"))
-				if c.RecoveryPlan != nil {
-					c.RecoveryPlan.AdvanceOnSuccess()
+
+				// AUTOMATIC ESCALATION EMAIL
+				if ts.EmailService != nil && c.CustomerEmail != "" {
+					caseCopy := *c
+					go func(c recovery.Case) {
+						recoveryURL := fmt.Sprintf("http://localhost:5173/status/%s", c.ID)
+						ts.EmailService.SendEscalationEmail(
+							c.CustomerEmail,
+							c.CustomerName,
+							c.ID,
+							c.PlanName,
+							float64(c.AmountPaise)/100.0,
+							c.Intervention.StoppingReason,
+							recoveryURL,
+						)
+					}(caseCopy)
 				}
-				ts.RecoveryMgr.SaveCase(c, "PAYMENT_CAPTURED", fmt.Sprintf("Idempotently captured ₹%.2f on Razorpay (%s)", float64(c.RecoveredAmountPaise)/100.0, c.RazorpayPaymentID))
+			} else {
+				payID := fmt.Sprintf("pay_tri_%s", strings.TrimPrefix(c.ID, "CASE-"))
+				actionName := "RECOVERY_EXECUTION"
+				if c.Intervention != nil {
+					actionName = c.Intervention.Action
+				}
+				c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, c.IncentiveDiscountPaise, actionName, fmt.Sprintf("Idempotently captured ₹%.2f on Razorpay (%s)", float64(c.AmountPaise-c.IncentiveDiscountPaise)/100.0, payID))
+
+				// AUTOMATIC RECEIPT EMAIL
+				if ts.EmailService != nil && c.CustomerEmail != "" {
+					caseCopy := *c
+					go func(c recovery.Case) {
+						ts.EmailService.SendReceiptEmail(
+							c.CustomerEmail,
+							c.CustomerName,
+							c.RazorpayPaymentID,
+							c.PlanName,
+							float64(c.RecoveredAmountPaise)/100.0,
+							c.ID,
+						)
+					}(caseCopy)
+				}
 			}
+
+		case recovery.StatusRetryScheduled, recovery.StatusRetryInFlight, recovery.StatusRetryFailed:
+			// Advancing a RETRY_SCHEDULED, RETRY_IN_FLIGHT, or RETRY_FAILED case represents scheduler/operator firing
+			// Edge 1: RETRY_IN_FLIGHT (Triggered API charge)
+			c.AttemptsMade++
+			c.Status = recovery.StatusRetryInFlight
+			ts.RecoveryMgr.SaveCase(c, "RETRY_IN_FLIGHT", fmt.Sprintf("Triggered automated retry execution on Razorpay API (attempt %d/%d)", c.AttemptsMade, c.MaxAttempts))
+
+			// Check if the retry failed (either explicitly requested or due to simulated decline)
+			if advanceReq.Outcome == "FAILURE" || advanceReq.Outcome == "DECLINED" {
+				if c.AttemptsMade >= c.MaxAttempts {
+					c.Status = recovery.StatusEscalated
+					if c.RecoveryPlan != nil {
+						c.RecoveryPlan.AdvanceOnFailure("Max dunning attempts limit reached")
+					}
+					ts.RecoveryMgr.SaveCase(c, "RETRY_FAILED_ESCALATED", fmt.Sprintf("Retry attempt %d/%d declined: max attempts limit reached. Escalated to human desk.", c.AttemptsMade, c.MaxAttempts))
+				} else {
+					c.Status = recovery.StatusRetryFailed
+					if c.RecoveryPlan != nil {
+						c.RecoveryPlan.AdvanceOnFailure("Primary rail decline")
+					}
+					ts.RecoveryMgr.SaveCase(c, "RETRY_FAILED", fmt.Sprintf("Retry attempt %d/%d declined: advancing bounded recovery plan for alternative rails.", c.AttemptsMade, c.MaxAttempts))
+				}
+			} else {
+				// Edge 2: Confirmed Razorpay capture
+				payID := fmt.Sprintf("pay_sched_%s", strings.TrimPrefix(c.ID, "CASE-"))
+				c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, 0, "RETRY_NEXT_PAYDAY_WINDOW", fmt.Sprintf("Scheduled auto-retry executed on payday window: confirmed capture ₹%.2f on Razorpay (%s)", float64(c.AmountPaise)/100.0, payID))
+
+				// AUTOMATIC RECEIPT EMAIL
+				if ts.EmailService != nil && c.CustomerEmail != "" {
+					caseCopy := *c
+					go func(c recovery.Case) {
+						ts.EmailService.SendReceiptEmail(
+							c.CustomerEmail,
+							c.CustomerName,
+							c.RazorpayPaymentID,
+							c.PlanName,
+							float64(c.RecoveredAmountPaise)/100.0,
+							c.ID,
+						)
+					}(caseCopy)
+				}
+			}
+
+		case recovery.StatusPTPCommitted:
+			// Advancing a PTP_COMMITTED case represents arrival of promised date and confirmed settlement
+			payID := fmt.Sprintf("pay_ptp_%s", strings.TrimPrefix(c.ID, "CASE-"))
+			c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, 0, "PROMISE_TO_PAY", fmt.Sprintf("Promised payment reached settlement date: idempotently captured ₹%.2f on Razorpay (%s)", float64(c.AmountPaise)/100.0, payID))
+
+			// AUTOMATIC RECEIPT EMAIL
+			if ts.EmailService != nil && c.CustomerEmail != "" {
+				caseCopy := *c
+				go func(c recovery.Case) {
+					ts.EmailService.SendReceiptEmail(
+						c.CustomerEmail,
+						c.CustomerName,
+						c.RazorpayPaymentID,
+						c.PlanName,
+						float64(c.RecoveredAmountPaise)/100.0,
+						c.ID,
+					)
+				}(caseCopy)
+			}
+
+		case recovery.StatusPTPMissed:
+			// Advancing a missed PTP case resumes bounded recovery workflow
+			c.Status = recovery.StatusIntervening
+			ts.RecoveryMgr.SaveCase(c, "RECOVERY_RESUMED", "PTP missed: resumed bounded recovery sequence with alternate rails")
 
 		case recovery.StatusEscalated:
 			// Escalated case successfully settled via 1-click fallback
-			c.Status = recovery.StatusRecovered
-			c.RecoveredAmountPaise = c.AmountPaise
-			c.RazorpayPaymentID = fmt.Sprintf("pay_tri_%s", strings.TrimPrefix(c.ID, "CASE-"))
-			if c.RecoveryPlan != nil {
-				c.RecoveryPlan.AdvanceOnSuccess()
+			payID := fmt.Sprintf("pay_tri_%s", strings.TrimPrefix(c.ID, "CASE-"))
+			c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, 0, "HUMAN_DESK_SETTLEMENT", fmt.Sprintf("Idempotently captured ₹%.2f on alternative rail (%s)", float64(c.AmountPaise)/100.0, payID))
+
+			// AUTOMATIC RECEIPT EMAIL
+			if ts.EmailService != nil && c.CustomerEmail != "" {
+				caseCopy := *c
+				go func(c recovery.Case) {
+					ts.EmailService.SendReceiptEmail(
+						c.CustomerEmail,
+						c.CustomerName,
+						c.RazorpayPaymentID,
+						c.PlanName,
+						float64(c.RecoveredAmountPaise)/100.0,
+						c.ID,
+					)
+				}(caseCopy)
 			}
-			ts.RecoveryMgr.SaveCase(c, "PAYMENT_CAPTURED", fmt.Sprintf("Idempotently captured ₹%.2f on alternative rail (%s)", float64(c.RecoveredAmountPaise)/100.0, c.RazorpayPaymentID))
 
 		default:
 			// Already in terminal state (RECOVERED, LOST)
@@ -560,21 +734,100 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 	// POST /api/v1/triage/cases/:id/resolve
 	if len(parts) == 2 && parts[1] == "resolve" && r.Method == http.MethodPost {
 		var req struct {
-			Resolution string `json:"resolution"` // "RECOVERED", "LOST", "ESCALATED"
+			Resolution string `json:"resolution"` // "RECOVERED", "RETRY_SCHEDULED", "PTP_COMMITTED", "PTP_MISSED", "LOST", "ESCALATED"
 			Notes      string `json:"notes"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
 		if req.Resolution == recovery.StatusRecovered || req.Resolution == "RECOVERED" {
-			c.Status = recovery.StatusRecovered
-			c.RecoveredAmountPaise = c.AmountPaise
-			c.RazorpayPaymentID = fmt.Sprintf("pay_upi_%s", strings.TrimPrefix(c.ID, "CASE-"))
-			ts.RecoveryMgr.SaveCase(c, "ALTERNATIVE_RAIL_CAPTURED", req.Notes)
+			payID := fmt.Sprintf("pay_upi_%s", strings.TrimPrefix(c.ID, "CASE-"))
+			c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, 0, "ALTERNATIVE_RAIL_UPI", req.Notes)
+
+			// AUTOMATIC RECEIPT DISPATCH
+			if ts.EmailService != nil && c.CustomerEmail != "" {
+				caseCopy := *c
+				go func(c recovery.Case) {
+					ts.EmailService.SendReceiptEmail(
+						c.CustomerEmail,
+						c.CustomerName,
+						c.RazorpayPaymentID,
+						c.PlanName,
+						float64(c.RecoveredAmountPaise)/100.0,
+						c.ID,
+					)
+				}(caseCopy)
+			}
+		} else if req.Resolution == recovery.StatusRetryScheduled || req.Resolution == "RETRY_SCHEDULED" {
+			c.Status = recovery.StatusRetryScheduled
+			c.RecoveredAmountPaise = 0
+			ts.RecoveryMgr.SaveCase(c, "RETRY_SCHEDULED", req.Notes)
+
+			// AUTOMATIC RETRY SCHEDULE DISPATCH
+			if ts.EmailService != nil && c.CustomerEmail != "" {
+				caseCopy := *c
+				go func(c recovery.Case) {
+					recoveryURL := fmt.Sprintf("http://localhost:5173/status/%s", c.ID)
+					ts.EmailService.SendRetryScheduledEmail(
+						c.CustomerEmail,
+						c.CustomerName,
+						c.ID,
+						c.PlanName,
+						float64(c.AmountPaise)/100.0,
+						"your upcoming salary/deposit window",
+						recoveryURL,
+					)
+				}(caseCopy)
+			}
+		} else if req.Resolution == recovery.StatusRetryInFlight || req.Resolution == "RETRY_IN_FLIGHT" {
+			c.Status = recovery.StatusRetryInFlight
+			c.RecoveredAmountPaise = 0
+			ts.RecoveryMgr.SaveCase(c, "RETRY_IN_FLIGHT", req.Notes)
+		} else if req.Resolution == recovery.StatusRetryFailed || req.Resolution == "RETRY_FAILED" {
+			c.AttemptsMade++
+			c.RecoveredAmountPaise = 0
+			if c.AttemptsMade >= c.MaxAttempts {
+				c.Status = recovery.StatusEscalated
+				ts.RecoveryMgr.SaveCase(c, "RETRY_FAILED_ESCALATED", fmt.Sprintf("Retry attempt %d/%d failed: max attempts limit reached (%s)", c.AttemptsMade, c.MaxAttempts, req.Notes))
+			} else {
+				c.Status = recovery.StatusRetryFailed
+				ts.RecoveryMgr.SaveCase(c, "RETRY_FAILED", fmt.Sprintf("Retry attempt %d/%d failed: %s", c.AttemptsMade, c.MaxAttempts, req.Notes))
+			}
+		} else if req.Resolution == recovery.StatusPTPCommitted || req.Resolution == "PTP_COMMITTED" {
+			c.Status = recovery.StatusPTPCommitted
+			c.RecoveredAmountPaise = 0
+			ts.RecoveryMgr.SaveCase(c, "PTP_PROMISE_REGISTERED", req.Notes)
+
+			// AUTOMATIC PTP DISPATCH
+			if ts.EmailService != nil && c.CustomerEmail != "" {
+				caseCopy := *c
+				go func(c recovery.Case) {
+					recoveryURL := fmt.Sprintf("http://localhost:5173/status/%s", c.ID)
+					pDate := "your promised date"
+					if c.PTPStatus != nil && c.PTPStatus.PromisedDate != "" {
+						pDate = c.PTPStatus.PromisedDate
+					}
+					ts.EmailService.SendPTPConfirmationEmail(
+						c.CustomerEmail,
+						c.CustomerName,
+						c.ID,
+						c.PlanName,
+						float64(c.AmountPaise)/100.0,
+						pDate,
+						recoveryURL,
+					)
+				}(caseCopy)
+			}
+		} else if req.Resolution == recovery.StatusPTPMissed || req.Resolution == "PTP_MISSED" {
+			c.Status = recovery.StatusPTPMissed
+			c.RecoveredAmountPaise = 0
+			ts.RecoveryMgr.SaveCase(c, "PTP_MISSED", req.Notes)
 		} else if req.Resolution == recovery.StatusLost || req.Resolution == "LOST" {
 			c.Status = recovery.StatusLost
+			c.RecoveredAmountPaise = 0
 			ts.RecoveryMgr.SaveCase(c, "MANUAL_MARK_LOST", req.Notes)
 		} else if req.Resolution == recovery.StatusEscalated || req.Resolution == "ESCALATED" {
 			c.Status = recovery.StatusEscalated
+			c.RecoveredAmountPaise = 0
 			ts.RecoveryMgr.SaveCase(c, "MANUAL_ESCALATION", req.Notes)
 		}
 
@@ -616,9 +869,30 @@ func (ts *TriageServer) handlePTPParse(w http.ResponseWriter, r *http.Request) {
 		if c, exists := ts.RecoveryMgr.GetCase(req.CaseID); exists {
 			c.PTPStatus = &parseResult
 			if parseResult.PromiseDetected {
-				ts.RecoveryMgr.SaveCase(c, "PTP_PROMISE_REGISTERED", fmt.Sprintf("Deterministic PTP scheduled for %s (%s)", parseResult.PromisedDate, parseResult.ParsingMethod))
+				// STRICT ACCOUNTING: PTP != Recovered Revenue
+				c.Status = recovery.StatusPTPCommitted
+				c.RecoveredAmountPaise = 0
+				ts.RecoveryMgr.SaveCase(c, "PTP_PROMISE_REGISTERED", fmt.Sprintf("Deterministic Promise-to-Pay registered for %s (%s). Status: PTP_COMMITTED (₹0 recovered until settlement)", parseResult.PromisedDate, parseResult.ParsingMethod))
+
+				// AUTOMATIC EVENT-DRIVEN PTP EMAIL DISPATCH
+				if ts.EmailService != nil && c.CustomerEmail != "" {
+					caseCopy := *c
+					go func(c recovery.Case, pDate string) {
+						recoveryURL := fmt.Sprintf("http://localhost:5173/status/%s", c.ID)
+						ts.EmailService.SendPTPConfirmationEmail(
+							c.CustomerEmail,
+							c.CustomerName,
+							c.ID,
+							c.PlanName,
+							float64(c.AmountPaise)/100.0,
+							pDate,
+							recoveryURL,
+						)
+					}(caseCopy, parseResult.PromisedDate)
+				}
 			} else if parseResult.NeedsHumanReview {
-				ts.RecoveryMgr.SaveCase(c, "PTP_ESCALATED_HUMAN", "Unrecognized customer language: routed to human review")
+				c.Status = recovery.StatusEscalated
+				ts.RecoveryMgr.SaveCase(c, "PTP_ESCALATED_HUMAN", fmt.Sprintf("Ambiguous natural language detected: routed to human retention desk (%s)", parseResult.EscalationReason))
 			}
 		}
 	}
@@ -1112,14 +1386,29 @@ func (ts *TriageServer) handleSchedulerTrigger(w http.ResponseWriter, r *http.Re
 	// Mark executed in scheduler
 	ts.Scheduler.MarkExecuted(dueStep.CaseID, dueStep.StepIndex)
 
-	// Execute recovery action
-	c.Status = recovery.StatusRecovered
-	c.RecoveredAmountPaise = c.AmountPaise
-	c.RazorpayPaymentID = fmt.Sprintf("pay_sched_%s_%d", strings.TrimPrefix(c.ID, "CASE-"), dueStep.StepIndex)
-	if c.RecoveryPlan != nil {
-		c.RecoveryPlan.AdvanceOnSuccess()
+	// Step 1: Log RETRY_IN_FLIGHT edge
+	c.AttemptsMade++
+	c.Status = recovery.StatusRetryInFlight
+	ts.RecoveryMgr.SaveCase(c, "RETRY_IN_FLIGHT", fmt.Sprintf("Scheduler fired: executing step #%d ('%s') via Razorpay API (attempt %d/%d)", dueStep.StepIndex, dueStep.Action, c.AttemptsMade, c.MaxAttempts))
+
+	// Step 2: Confirmed capture from Razorpay via RecordCapture single canonical write path
+	payID := fmt.Sprintf("pay_sched_%s_%d", strings.TrimPrefix(c.ID, "CASE-"), dueStep.StepIndex)
+	c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, 0, dueStep.Action, fmt.Sprintf("Confirmed Razorpay capture for step #%d ('%s') — recovered ₹%.2f (%s)", dueStep.StepIndex, dueStep.Action, float64(c.AmountPaise)/100.0, payID))
+
+	// AUTOMATIC RECEIPT EMAIL
+	if ts.EmailService != nil && c.CustomerEmail != "" {
+		caseCopy := *c
+		go func(c recovery.Case) {
+			ts.EmailService.SendReceiptEmail(
+				c.CustomerEmail,
+				c.CustomerName,
+				c.RazorpayPaymentID,
+				c.PlanName,
+				float64(c.RecoveredAmountPaise)/100.0,
+				c.ID,
+			)
+		}(caseCopy)
 	}
-	ts.RecoveryMgr.SaveCase(c, "SCHEDULED_STEP_EXECUTED", fmt.Sprintf("Executed scheduled step #%d ('%s') — recovered ₹%.2f via Razorpay (%s)", dueStep.StepIndex, dueStep.Action, float64(c.RecoveredAmountPaise)/100.0, c.RazorpayPaymentID))
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":         "STEP_EXECUTED",
@@ -1148,3 +1437,175 @@ func (ts *TriageServer) handleSchedulerPending(w http.ResponseWriter, r *http.Re
 		"due_steps":              due,
 	})
 }
+
+type SendEmailRequest struct {
+	To            string  `json:"to"`
+	CaseID        string  `json:"case_id"`
+	CustomerName  string  `json:"customer_name"`
+	PlanName      string  `json:"plan_name"`
+	AmountINR     float64 `json:"amount_inr"`
+	Reason        string  `json:"reason"`
+	RecoveryURL   string  `json:"recovery_url"`
+	EmailType     string  `json:"email_type,omitempty"` // "ACTION_REQUIRED", "PTP_CONFIRMATION", "RETRY_SCHEDULED", "PAYMENT_RECEIPT"
+	PromisedDate  string  `json:"promised_date,omitempty"`
+	ScheduledDate string  `json:"scheduled_date,omitempty"`
+	PaymentID     string  `json:"payment_id,omitempty"`
+}
+
+func (ts *TriageServer) handleSendEmail(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req SendEmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.To == "" || req.To == "demo-customer@example.com" || req.To == "storefront-demo@example.com" {
+		if req.CaseID != "" {
+			if c, ok := ts.RecoveryMgr.GetCase(req.CaseID); ok && c.CustomerEmail != "" && c.CustomerEmail != "demo-customer@example.com" && c.CustomerEmail != "storefront-demo@example.com" {
+				req.To = c.CustomerEmail
+			}
+		}
+		if (req.To == "" || req.To == "demo-customer@example.com" || req.To == "storefront-demo@example.com") && ts.EmailService.SMTPUser != "" {
+			req.To = ts.EmailService.SMTPUser
+		}
+	}
+
+	if req.CaseID != "" {
+		if c, ok := ts.RecoveryMgr.GetCase(req.CaseID); ok {
+			// Policy Gate: Only suppress automated dunning if not an explicit event confirmation
+			rootCause := ""
+			action := ""
+			if c.Diagnosis != nil {
+				rootCause = c.Diagnosis.RootCause
+			}
+			if c.Intervention != nil {
+				action = c.Intervention.Action
+			}
+
+			if req.EmailType != "RETRY_SCHEDULED" && req.EmailType != "PTP_CONFIRMATION" && req.EmailType != "PAYMENT_RECEIPT" && req.EmailType != "ACTION_REQUIRED" {
+				allowed, reasonMsg := ts.EmailService.ShouldSendEmailForCase(rootCause, action)
+				if !allowed {
+					json.NewEncoder(w).Encode(messaging.EmailDispatchResult{
+						Recipient:     req.To,
+						Status:        "SUPPRESSED_POLICY",
+						Subject:       "Automated Email Suppressed",
+						Message:       reasonMsg,
+						DispatchedAt:  time.Now().UTC().Format(time.RFC3339),
+						IsDemoAccount: ts.EmailService.IsDemoDomain(req.To),
+					})
+					return
+				}
+			}
+
+			if req.CustomerName == "" {
+				req.CustomerName = c.CustomerName
+			}
+			if req.PlanName == "" {
+				req.PlanName = c.PlanName
+			}
+			if req.AmountINR == 0 {
+				req.AmountINR = float64(c.AmountPaise) / 100.0
+			}
+			if req.Reason == "" && c.Diagnosis != nil {
+				req.Reason = c.Diagnosis.CustomerFacingMsg
+			}
+			if req.PromisedDate == "" && c.PTPStatus != nil && c.PTPStatus.PromisedDate != "" {
+				req.PromisedDate = c.PTPStatus.PromisedDate
+			}
+			if req.PaymentID == "" && c.RazorpayPaymentID != "" {
+				req.PaymentID = c.RazorpayPaymentID
+			}
+		}
+	}
+
+	if req.CustomerName == "" {
+		req.CustomerName = strings.Split(req.To, "@")[0]
+	}
+	if req.PlanName == "" {
+		req.PlanName = "Cloud Compute Subscription"
+	}
+	if req.RecoveryURL == "" {
+		if req.CaseID != "" {
+			if req.EmailType == "ACTION_REQUIRED" || req.EmailType == "" {
+				req.RecoveryURL = fmt.Sprintf("http://localhost:5173/status/%s?action=complete_recovery", req.CaseID)
+			} else {
+				req.RecoveryURL = fmt.Sprintf("http://localhost:5173/status/%s", req.CaseID)
+			}
+		} else {
+			req.RecoveryURL = "http://localhost:5173/portal"
+		}
+	}
+
+	var result messaging.EmailDispatchResult
+	switch req.EmailType {
+	case "PTP_CONFIRMATION":
+		pDate := req.PromisedDate
+		if pDate == "" {
+			pDate = "your scheduled date"
+		}
+		result = ts.EmailService.SendPTPConfirmationEmail(
+			req.To,
+			req.CustomerName,
+			req.CaseID,
+			req.PlanName,
+			req.AmountINR,
+			pDate,
+			req.RecoveryURL,
+		)
+	case "RETRY_SCHEDULED":
+		sDate := req.ScheduledDate
+		if sDate == "" {
+			sDate = "your upcoming funding cycle"
+		}
+		result = ts.EmailService.SendRetryScheduledEmail(
+			req.To,
+			req.CustomerName,
+			req.CaseID,
+			req.PlanName,
+			req.AmountINR,
+			sDate,
+			req.RecoveryURL,
+		)
+	case "PAYMENT_RECEIPT":
+		pID := req.PaymentID
+		if pID == "" {
+			pID = fmt.Sprintf("pay_rec_%s", strings.TrimPrefix(req.CaseID, "CASE-"))
+		}
+		result = ts.EmailService.SendReceiptEmail(
+			req.To,
+			req.CustomerName,
+			req.CaseID,
+			req.PlanName,
+			req.AmountINR,
+			pID,
+		)
+	default:
+		// Default: Action Required recovery statement
+		result = ts.EmailService.SendActionRequiredEmail(
+			req.To,
+			req.CustomerName,
+			req.CaseID,
+			req.PlanName,
+			req.AmountINR,
+			req.Reason,
+			req.RecoveryURL,
+		)
+	}
+
+	json.NewEncoder(w).Encode(result)
+}
+

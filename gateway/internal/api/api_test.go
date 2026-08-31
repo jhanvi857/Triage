@@ -3,10 +3,15 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	"github.com/ledger/gateway/internal/diagnosis"
+	"github.com/ledger/gateway/internal/intervention"
+	"github.com/ledger/gateway/internal/recovery"
 )
 
 func setupTestServer(t *testing.T) (*Server, func()) {
@@ -167,3 +172,208 @@ func TestAPI_IdempotentReplayNoDoubleCharge(t *testing.T) {
 		t.Fatalf("expected spent 180000 paise (₹1,800), got %d (double charged!)", snap.SpentPaise)
 	}
 }
+
+func TestAPI_StrictPTPAccounting_ZeroRecoveredUntilSettlement(t *testing.T) {
+	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager())
+	mux := http.NewServeMux()
+	ts.RegisterRoutes(mux)
+
+	// 1. Initial State: Seed cases exist, no case recovered yet
+	stats := ts.RecoveryMgr.GetStats()
+	if stats.TotalRecoveredPaise != 0 {
+		t.Fatalf("expected initial total_recovered_paise to be 0, got %d", stats.TotalRecoveredPaise)
+	}
+
+	// 2. Register PTP commitment for CASE-8492 (₹4,800 = 480,000 paise)
+	ptpReqBody := `{"case_id":"CASE-8492","message":"Bhai 5th ko debit karna"}`
+	ptpReq := httptest.NewRequest("POST", "/api/v1/triage/ptp/parse", bytes.NewReader([]byte(ptpReqBody)))
+	ptpW := httptest.NewRecorder()
+	mux.ServeHTTP(ptpW, ptpReq)
+
+	if ptpW.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from PTP parse, got %d: %s", ptpW.Code, ptpW.Body.String())
+	}
+
+	// Check case status: MUST be PTP_COMMITTED
+	c, exists := ts.RecoveryMgr.GetCase("CASE-8492")
+	if !exists {
+		t.Fatalf("case CASE-8492 not found")
+	}
+	if c.Status != "PTP_COMMITTED" {
+		t.Fatalf("expected status PTP_COMMITTED after PTP registration, got %s", c.Status)
+	}
+	if c.RecoveredAmountPaise != 0 {
+		t.Fatalf("expected recovered_amount_paise to be 0 for PTP commitment, got %d", c.RecoveredAmountPaise)
+	}
+
+	// Verify stats: TotalRecovered MUST remain 0, TotalPTPCommitted MUST be 480000
+	statsAfterPTP := ts.RecoveryMgr.GetStats()
+	if statsAfterPTP.TotalRecoveredPaise != 0 {
+		t.Fatalf("STRICT ACCOUNTING VIOLATION: expected TotalRecoveredPaise=0 during PTP_COMMITTED state, got %d", statsAfterPTP.TotalRecoveredPaise)
+	}
+	if statsAfterPTP.TotalPTPCommittedPaise != 480000 {
+		t.Fatalf("expected TotalPTPCommittedPaise=480000, got %d", statsAfterPTP.TotalPTPCommittedPaise)
+	}
+
+	// 3. Simulate arrival of promised date: Settle payment via advance
+	advReq := httptest.NewRequest("POST", "/api/v1/triage/cases/CASE-8492/advance", nil)
+	advW := httptest.NewRecorder()
+	mux.ServeHTTP(advW, advReq)
+
+	if advW.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from advance, got %d", advW.Code)
+	}
+
+	cSettled, _ := ts.RecoveryMgr.GetCase("CASE-8492")
+	if cSettled.Status != "RECOVERED" {
+		t.Fatalf("expected status RECOVERED after settlement, got %s", cSettled.Status)
+	}
+	if cSettled.RecoveredAmountPaise != 480000 {
+		t.Fatalf("expected recovered_amount_paise to be 480000 upon capture, got %d", cSettled.RecoveredAmountPaise)
+	}
+
+	// Verify stats: TotalRecovered MUST now be 480000
+	finalStats := ts.RecoveryMgr.GetStats()
+	if finalStats.TotalRecoveredPaise != 480000 {
+		t.Fatalf("expected TotalRecoveredPaise=480000 after confirmed settlement, got %d", finalStats.TotalRecoveredPaise)
+	}
+	if finalStats.TotalRecoveredINR != 4800.00 {
+		t.Fatalf("expected TotalRecoveredINR=4800.00, got %f", finalStats.TotalRecoveredINR)
+	}
+}
+
+func TestAPI_EmailPolicy_SuppressesFraudAndDispatchesReceipt(t *testing.T) {
+	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager())
+	mux := http.NewServeMux()
+	ts.RegisterRoutes(mux)
+
+	// 1. Ingest a case with FRAUD_SUSPECTED
+	caseReqBody := `{"customer_name":"Suspicious User","customer_email":"badactor@example.com","plan_name":"GPU","amount_paise":1000000,"error_code":"FRAUD_SUSPECTED","error_desc":"Velocity spike"}`
+	caseReq := httptest.NewRequest("POST", "/api/v1/triage/cases", bytes.NewReader([]byte(caseReqBody)))
+	caseW := httptest.NewRecorder()
+	mux.ServeHTTP(caseW, caseReq)
+
+	var createdCase map[string]interface{}
+	_ = json.Unmarshal(caseW.Body.Bytes(), &createdCase)
+	caseID, _ := createdCase["id"].(string)
+
+	// Try sending statement email for the fraud stop case -> MUST BE SUPPRESSED
+	emailReqBody := `{"case_id":"` + caseID + `","to":"badactor@example.com"}`
+	emailReq := httptest.NewRequest("POST", "/api/v1/triage/email/send", bytes.NewReader([]byte(emailReqBody)))
+	emailW := httptest.NewRecorder()
+	mux.ServeHTTP(emailW, emailReq)
+
+	var emailResp map[string]interface{}
+	_ = json.Unmarshal(emailW.Body.Bytes(), &emailResp)
+	if emailResp["status"] != "SUPPRESSED_POLICY" {
+		t.Fatalf("expected email to be SUPPRESSED_POLICY for fraud case, got: %+v", emailResp)
+	}
+
+	// 2. Receipt email for a recovered case
+	receiptReqBody := `{"case_id":"CASE-8492","to":"billing@acmecloud.io","email_type":"PAYMENT_RECEIPT","payment_id":"pay_rec_test_123"}`
+	receiptReq := httptest.NewRequest("POST", "/api/v1/triage/email/send", bytes.NewReader([]byte(receiptReqBody)))
+	receiptW := httptest.NewRecorder()
+	mux.ServeHTTP(receiptW, receiptReq)
+
+	var receiptResp map[string]interface{}
+	_ = json.Unmarshal(receiptW.Body.Bytes(), &receiptResp)
+	if receiptResp["status"] != "SKIPPED_DEMO_ACCOUNT" && receiptResp["status"] != "DELIVERED_SMTP" && receiptResp["status"] != "NOT_CONFIGURED" {
+		t.Fatalf("unexpected receipt email status: %+v", receiptResp)
+	}
+}
+
+func TestAPI_StrictScheduledRetryLifecycle_ExplicitPendingAndAttemptBounds(t *testing.T) {
+	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager())
+	mux := http.NewServeMux()
+	ts.RegisterRoutes(mux)
+
+	// 1. Create a case for scheduled retry (CASE-7001, ₹4,200 = 420,000 paise)
+	caseReqBody := `{"customer_name":"Test Scheduled Corp","customer_email":"test@example.com","plan_name":"Compute Pro","amount_paise":420000,"error_code":"INSUFFICIENT_FUNDS","error_desc":"Balance insufficient"}`
+	caseReq := httptest.NewRequest("POST", "/api/v1/triage/cases", bytes.NewReader([]byte(caseReqBody)))
+	caseW := httptest.NewRecorder()
+	mux.ServeHTTP(caseW, caseReq)
+
+	var createdCase map[string]interface{}
+	_ = json.Unmarshal(caseW.Body.Bytes(), &createdCase)
+	caseID, _ := createdCase["id"].(string)
+
+	// 2. Schedule Auto-Retry: Status becomes RETRY_SCHEDULED, recovered revenue MUST be 0
+	schedReqBody := `{"resolution":"RETRY_SCHEDULED","notes":"Scheduled for salary day"}`
+	schedReq := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/resolve", caseID), bytes.NewReader([]byte(schedReqBody)))
+	schedW := httptest.NewRecorder()
+	mux.ServeHTTP(schedW, schedReq)
+
+	c, _ := ts.RecoveryMgr.GetCase(caseID)
+	if c.Status != "RETRY_SCHEDULED" {
+		t.Fatalf("expected status RETRY_SCHEDULED, got %s", c.Status)
+	}
+	if c.RecoveredAmountPaise != 0 {
+		t.Fatalf("STRICT ACCOUNTING VIOLATION: expected recovered_amount_paise=0 during RETRY_SCHEDULED state, got %d", c.RecoveredAmountPaise)
+	}
+
+	statsAfterSched := ts.RecoveryMgr.GetStats()
+	if statsAfterSched.TotalRecoveredPaise != 0 {
+		t.Fatalf("expected TotalRecoveredPaise=0 during RETRY_SCHEDULED, got %d", statsAfterSched.TotalRecoveredPaise)
+	}
+	if statsAfterSched.TotalPTPCommittedPaise != 420000 {
+		t.Fatalf("expected TotalPTPCommittedPaise=420000, got %d", statsAfterSched.TotalPTPCommittedPaise)
+	}
+
+	// 3. Retry Attempt 1 Fails: Increments AttemptsMade to 2 and transitions to RETRY_FAILED
+	advFail1ReqBody := `{"outcome":"FAILURE","reason":"Card declined on retry"}`
+	advFail1Req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/advance", caseID), bytes.NewReader([]byte(advFail1ReqBody)))
+	advFail1W := httptest.NewRecorder()
+	mux.ServeHTTP(advFail1W, advFail1Req)
+
+	cFail1, _ := ts.RecoveryMgr.GetCase(caseID)
+	if cFail1.Status != "RETRY_FAILED" {
+		t.Fatalf("expected status RETRY_FAILED on declined retry attempt 1, got %s", cFail1.Status)
+	}
+	if cFail1.AttemptsMade != 2 {
+		t.Fatalf("expected AttemptsMade=2 (initial decline + retry 1), got %d", cFail1.AttemptsMade)
+	}
+
+	// 4. Retry Attempt 2 Fails: AttemptsMade becomes 3 (hits MaxAttempts=3) -> MUST escalate to ESCALATED, bounding retries
+	advFail2ReqBody := `{"outcome":"FAILURE","reason":"Still insufficient funds on second retry"}`
+	advFail2Req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/advance", caseID), bytes.NewReader([]byte(advFail2ReqBody)))
+	advFail2W := httptest.NewRecorder()
+	mux.ServeHTTP(advFail2W, advFail2Req)
+
+	cEscalated, _ := ts.RecoveryMgr.GetCase(caseID)
+	if cEscalated.Status != "ESCALATED" {
+		t.Fatalf("POLICY BOUND ENFORCEMENT VIOLATION: expected case to escalate to ESCALATED after hitting max attempts limit (3/3), got %s", cEscalated.Status)
+	}
+	if cEscalated.AttemptsMade != 3 {
+		t.Fatalf("expected AttemptsMade=3, got %d", cEscalated.AttemptsMade)
+	}
+
+	// 6. Test Successful Capture on another case -> transitions to RECOVERED with confirmed Razorpay ID
+	case2ReqBody := `{"customer_name":"Success Case Corp","customer_email":"success@example.com","plan_name":"Compute Pro","amount_paise":500000,"error_code":"INSUFFICIENT_FUNDS","error_desc":"Balance insufficient"}`
+	case2Req := httptest.NewRequest("POST", "/api/v1/triage/cases", bytes.NewReader([]byte(case2ReqBody)))
+	case2W := httptest.NewRecorder()
+	mux.ServeHTTP(case2W, case2Req)
+
+	var createdCase2 map[string]interface{}
+	_ = json.Unmarshal(case2W.Body.Bytes(), &createdCase2)
+	case2ID, _ := createdCase2["id"].(string)
+
+	// Set to RETRY_SCHEDULED
+	sched2Req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/resolve", case2ID), bytes.NewReader([]byte(`{"resolution":"RETRY_SCHEDULED"}`)))
+	mux.ServeHTTP(httptest.NewRecorder(), sched2Req)
+
+	// Settle with confirmed capture
+	advSuccessReq := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/advance", case2ID), bytes.NewReader([]byte(`{"outcome":"SUCCESS"}`)))
+	mux.ServeHTTP(httptest.NewRecorder(), advSuccessReq)
+
+	cSuccess, _ := ts.RecoveryMgr.GetCase(case2ID)
+	if cSuccess.Status != "RECOVERED" {
+		t.Fatalf("expected status RECOVERED upon confirmed capture, got %s", cSuccess.Status)
+	}
+	if cSuccess.RecoveredAmountPaise != 500000 {
+		t.Fatalf("expected recovered_amount_paise=500000 upon capture, got %d", cSuccess.RecoveredAmountPaise)
+	}
+	if cSuccess.RazorpayPaymentID == "" {
+		t.Fatalf("expected non-empty RazorpayPaymentID upon capture")
+	}
+}
+
