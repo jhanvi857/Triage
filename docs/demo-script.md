@@ -75,9 +75,9 @@ python agent/run_scenarios.py --scenario 4
 ```
 
 **What is demonstrated**:
-- **Case**: Enterprise Mandate decline of **₹12,500** (exceeds ₹10,000 threshold).
+- **Case**: Enterprise Mandate decline of **₹25,000** (exceeds ₹15,000 policy threshold).
 - **Policy Veto**: Automatic dunning is vetoed:
-  - `HIGH_VALUE_THRESHOLD`: `Transaction amount ₹12,500 >= ₹10,000 ceiling` $\rightarrow$ **VETOED**
+  - `HIGH_VALUE_THRESHOLD`: `Transaction amount ₹25,000 >= ₹15,000 ceiling` $\rightarrow$ **VETOED**
 - **Action**: Assigned to Senior Human Account Retention Desk with full telemetry context.
 
 ---

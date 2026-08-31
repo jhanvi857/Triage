@@ -215,13 +215,13 @@ def scenario_3_expired_card():
 
 
 def scenario_4_high_value_escalation():
-    print_header("SCENARIO 4: High-Value Threshold Veto (₹12,500 >= ₹10,000) -> Human Escalation")
+    print_header("SCENARIO 4: High-Value Threshold Veto (₹25,000 >= ₹15,000) -> Human Escalation")
 
-    print_step(1, "Ingestion", "Enterprise Mandate failure of ₹12,500 (exceeds ₹10,000 policy threshold)...")
+    print_step(1, "Ingestion", "Enterprise Mandate failure of ₹25,000 (exceeds ₹15,000 policy threshold)...")
     c = http_post("/api/v1/triage/cases", {
         "customer_name": "HyperScale Logistics Ltd",
-        "plan_name": "Multi-Service Compliance License (Annual)",
-        "amount_paise": 1250000,  # ₹12,500.00
+        "plan_name": "Multi-Service Compliance License (Enterprise Custom)",
+        "amount_paise": 2500000,  # ₹25,000.00
         "original_rail": "NACH_MANDATE",
         "error_code": "MANDATE_REVOKED",
         "error_desc": "Recurring autopay authorization revoked at destination bank",
