@@ -75,17 +75,17 @@ Satisfies **Razorpay AI Buildathon Track 03**: *Detect revenue at risk → deter
 
 ## 2. Positioning: How Triage Complements Existing Payment Infrastructure
 
-| Layer | Existing Payment Infrastructure | Triage Revenue Recovery Control Plane |
+| Layer | Existing Payment Infrastructure (Siloed per Product) | Triage Revenue Recovery Control Plane (Cross-Workflow) |
 |---|---|---|
-| **Multi-Surface Detection** | Disconnected payment, cart, subscription, invoice tables | Unified detection across checkouts, subscriptions, invoices, mandates |
-| **Failure Diagnosis** | Raw gateway error codes (`BAD_REQUEST`, `504`) | 8-cause deterministic diagnosis taxonomy with structured telemetry parsing |
-| **Eligibility & Candidates** | Blind retries on the same failed instrument | Context-aware candidate generation based on alternate cards, UPI, payday proximity |
-| **Recovery Decision** | Static rules / arbitrary schedules | ML ranking by Expected Recovery Value ($\text{ERV} = \hat{P}(\text{recover}) \times \text{Amount}$) |
-| **Workflow Planning** | Single-shot retries | Bounded multi-step state machines with strict stopping conditions |
-| **Customer Coordination** | Workflows harass customers independently | Cross-workflow coordinator with 4h cooldowns and priority suppression |
-| **Governance & Policy** | Platform / merchant basic limits | Deterministic policy vetoes: max attempts (3/3), ₹10k ceiling, concession cap (≤5% & ≤₹500), fraud stop |
-| **Execution Authority** | Standard API calls | Cryptographically idempotent execution (`same action + key → one financial effect`) |
-| **Auditability** | Standard logs | Immutable SHA-256 hash-chained recovery ledger with real-time SSE stream |
+| **Multi-Surface Detection** | **Product-siloed tables**: Separate failure event streams and retry queues for Checkouts, Subscriptions, Payment Links, and Invoices | **Unified control plane**: Continuously correlates and prioritizes revenue at risk across all 6 commercial surfaces in a single pane |
+| **Failure Diagnosis** | **Localized error mapping**: Product-specific gateway decline reason parsing (`BAD_REQUEST`, `GATEWAY_TIMEOUT`) | **Deterministic 8-cause taxonomy**: Universal failure classification across all payment rails with structured telemetry enrichment |
+| **Eligibility & Candidates** | **Product-scoped actions**: Optimizer dynamically switches gateway rails for checkouts; Subscriptions triggers dunning schedules | **Global candidate generation**: Evaluates all potential recovery pathways (backup card, instant UPI intent, payday window, conversational PTP, net-30 invoice) regardless of originating product |
+| **Recovery Decisioning** | **Independent routing models**: Sub-product ML optimizes specific rail authorization probability | **Cross-workflow Expected Value**: Ranks actions by net Expected Recovery Value ($\text{ERV} = \hat{P}(\text{recover} \mid \mathbf{x}, a) \times (\text{Amount} - \text{Concession}) - \text{Cost}$) across all available recovery mechanisms |
+| **Workflow State Machine** | **Product-isolated lifecycles**: Fixed retry intervals managed within individual product silos | **Bounded multi-step state machine**: End-to-end plan execution with deterministic stopping conditions ($\le 3$ attempts, exhaustion, fraud stop) |
+| **Customer Coordination** | **Uncoordinated multi-channel outreach**: Independent alerts from subscription dunning, cart abandonment, and invoices can contact the same customer simultaneously | **Central cross-workflow coordinator**: Enforces global contact cooldowns (minimum 4 hours), suppresses lower-value messages, and prevents customer fatigue across all accounts |
+| **Governance & Policy** | **Merchant configuration limits**: Configured per payment method or subscription plan | **Centralized deterministic policy envelope**: Platform-wide hard limits: max 3 attempts, ₹10k high-value human escalation gate, concession caps ($\le 5\%$ & $\le \text{₹}500$), and immediate fraud freezes |
+| **Execution Authority** | **Direct product API execution**: Standard gateway capture, refund, and mandate calls with merchant API keys | **Policy-bounded execution envelope**: Executes only actions satisfying deterministic policy, verified through an immutable SHA-256 hash-chained recovery ledger |
+| **Audit & Ledger Visibility** | **Siloed transaction logs & webhook histories**: Dispersed across product dashboards | **Cryptographic SHA-256 Recovery Ledger**: Real-time SSE telemetry feed and hash-chained audit trail unifying all recovery decisions, policy vetoes, and financial outcomes |
 
 ---
 
@@ -194,53 +194,92 @@ python triage_scenarios.py --all
 - **Evaluation Methodology**: 750 realistic held-out test cases evaluated under irreducible Bernoulli payment outcome entropy ($y \sim \text{Bernoulli}(P(\text{recover} \mid \mathbf{x}, a))$) using common random numbers against identical policy constraints and failure codes.
 - **Model Architecture**: Random Forest Classifier (100 estimators, bagging ensemble).
 - **Model Accuracy**: ROC-AUC `0.7819` | Precision `0.6788` | Recall `0.8478` | F1-Score `0.7539` | Accuracy `0.7192`
-- **Total Revenue At Risk**: **₹4,346,400.00**
-- **Static Baseline Recovery**: ₹2,665,700.00 (62.80%)
-- **ML Policy Recovery**: **₹2,962,000.00** (68.40%)
-- **Absolute Recovery Rate Uplift**: **+5.60 percentage points** ($68.40\% - 62.80\%$)
-- **Relative Revenue Uplift**: **+11.12%** ($+₹296,300.00$ net gain)
-- **Benchmark Leader (XGBoost)**: Achieves ROC-AUC `0.7953`, 71.73% recovery (+8.93pp uplift, +17.49% relative, +₹466,300.00); Random Forest is deployed to production for zero external C++ native runtime drift and auditable decision trees.
+- **Total Revenue At Risk**: **₹4,346,400.00** (750 cases)
+- **Static Baseline Recovery**: ₹2,665,700.00 (**61.33%** Revenue Recovery | 62.80% Case Volume)
+- **ML Policy Recovery (Random Forest)**: **₹2,962,000.00** (**68.15%** Revenue Recovery | 68.40% Case Volume)
+- **Absolute Revenue Recovery Uplift**: **+6.82 percentage points** ($68.15\% - 61.33\%$)
+- **Relative Revenue Uplift**: **+11.12%** ($+₹296,300.00 / ₹2,665,700.00$ net gain)
+- **Absolute Case Volume Uplift**: **+5.60 percentage points** ($68.40\% - 62.80\%$)
+- **Benchmark Leader (XGBoost)**: Achieves ROC-AUC `0.7953`, ₹3,132,000.00 recovered (**72.06%** Revenue Recovery | 71.73% Case Volume, +10.73pp revenue uplift, +17.49% relative gain, +₹466,300.00); Random Forest is deliberately deployed to production for zero external C++ native runtime drift, deterministic execution, and auditable decision trees.
 
 ### Benchmark v2: Interactive Scenario Test Batch (50 Cases)
 - **Evaluation Partition**: Live dynamic test batch run during demo execution (`python triage_scenarios.py --all` or UI Batch Harness).
 - **Total Revenue At Risk**: ₹225,100.00 (50 cases)
-- **Static Baseline Recovery**: ₹147,100.00 (65.3%)
-- **ML Policy Recovery**: **₹181,100.00** (80.5%)
+- **Static Baseline Recovery**: ₹147,100.00 (65.35%)
+- **ML Policy Recovery**: **₹181,100.00** (80.45%)
 - **Relative Revenue Uplift**: **+23.11%** (+15.10 percentage points absolute recovery rate)
 
 
 ---
 
-## 11. Quickstart & Verification
+## 11. Customer Billing Portal & 1-Click Email Settlement
 
-### Start the Gateway:
+Triage provides a self-serve recovery portal and email authorization flow that balances proactive customer engagement with strict financial accounting:
+
+### A. Customer Billing Portal (`/portal`)
+- **Central Self-Serve Hub**: Real-time overview of all customer invoices, active subscriptions, and payment statuses.
+- **In-Progress Status Transparency**: Clear visual distinction between unaddressed declines and active recovery workflows:
+  - `Action Required`: Fresh decline requiring customer attention.
+  - `Retry scheduled — {date}`: Automated off-peak or payday auto-retry locked in ledger.
+  - `Promise to pay — due {date}`: Deferred settlement agreement registered via NLP.
+  - `With support specialist`: Policy-vetoed or high-value case routed to retention desk.
+- **Softened In-Progress Framing**: Header counters dynamically categorize items as `{pendingActionCount} Action Required • {inProgressCount} In Progress`, preventing repetitive customer friction.
+
+### B. Outbound SMTP Relay & Email-Gated 1-Click Authorization
+- **Live SMTP Dispatch**: Integrates with standard authenticated SMTP relays (e.g. Gmail App Passwords, SendGrid, Amazon SES) for real inbox delivery.
+- **1-Click Settlement URLs**: Dispatches signed recovery links (`/status/{CASE_ID}?action=complete_recovery`). Clicking the link directly from the email completes settlement and captures payment on Razorpay sandbox.
+- **On-Screen Confirmation Gating**: Web buttons on the recovery center dispatch the authorization link and prompt the user to confirm via their email, ensuring explicit customer intent before state transitions.
+
+### C. Strict Recovery-Accounting Invariant
+- **Authoritative Capture Invariant**: A case **only** transitions to `RECOVERED` upon verified payment capture via `RecordCapture()`.
+- **Zero Premature Revenue**: Scheduling an auto-retry, committing a promise-to-pay (PTP), or updating an instrument leaves `amount_recovered = 0` until funds clear.
+- **Immutable Terminal State**: Downgrading an already-recovered case away from `RECOVERED` is strictly forbidden and protected by ledger state assertions.
+
+---
+
+## 12. Quickstart & Configuration
+
+### 1. Configure Outbound SMTP (Optional for Live Emails):
+Copy `.env.example` to `gateway/.env` and provide your credentials (e.g. Gmail App Password):
+```bash
+cp .env.example gateway/.env
+# Edit gateway/.env:
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=your-email@gmail.com
+# SMTP_PASS=your-16-char-app-password
+```
+
+### 2. Start the Gateway:
 ```bash
 cd gateway
 go run ./cmd/gateway/main.go
+# API Server listening on http://localhost:8080
 ```
 
-### Run Go Unit Tests:
+### 3. Run Go Unit Tests:
 ```bash
 cd gateway
 go test -v ./...
 ```
 
-### Run All 10 Scenarios:
+### 4. Run All 10 End-to-End Scenarios:
 ```bash
 cd agent
 python triage_scenarios.py --all
 ```
 
-### Start the Dashboard:
+### 5. Start the Operations Dashboard:
 ```bash
 cd dashboard
 npm run dev
 # Open http://localhost:3000
 ```
 
-### Start the Storefront:
+### 6. Start the Customer Storefront & Billing Portal:
 ```bash
 cd storefront
 npm run dev
-# Open http://localhost:5173
+# Merchant Storefront: http://localhost:5173
+# Customer Billing Portal: http://localhost:5173/portal
 ```

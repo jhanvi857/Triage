@@ -175,12 +175,13 @@ def benchmark_all_models(num_cases: int = 5000, seed: int = 42):
             disc = int(amt * 0.05) if "DISCOUNT" in baseline_act else 0
             base_recovered_paise += (amt - min(disc, 50000))
 
-    baseline_rate = (base_recovered_cases / total_test_cases) * 100.0
     baseline_inr = base_recovered_paise / 100.0
+    baseline_case_rate = (base_recovered_cases / total_test_cases) * 100.0
+    baseline_revenue_rate = (baseline_inr / risk_inr) * 100.0
 
     print(f"\n[2/4] Static Baseline Performance:")
-    print(f"      - Total Revenue At Risk : ₹{risk_inr:,.2f}")
-    print(f"      - Baseline Recovered    : ₹{baseline_inr:,.2f} ({baseline_rate:.2f}%)")
+    print(f"      - Total Revenue At Risk : ₹{risk_inr:,.2f} ({total_test_cases} cases)")
+    print(f"      - Baseline Recovered    : ₹{baseline_inr:,.2f} ({baseline_revenue_rate:.2f}% Revenue | {baseline_case_rate:.2f}% Cases)")
 
     # Train and evaluate each model
     results = {}
@@ -245,10 +246,13 @@ def benchmark_all_models(num_cases: int = 5000, seed: int = 42):
                 disc = int(amt * 0.05) if "DISCOUNT" in best_act else 0
                 model_rec_paise += (amt - min(disc, 50000))
 
-        rec_rate = (model_rec_cases / total_test_cases) * 100.0
+        rec_case_rate = (model_rec_cases / total_test_cases) * 100.0
         rec_inr = model_rec_paise / 100.0
-        abs_uplift = rec_rate - baseline_rate
-        rel_uplift = ((rec_inr - baseline_inr) / max(baseline_inr, 1)) * 100.0
+        rec_revenue_rate = (rec_inr / risk_inr) * 100.0
+
+        abs_revenue_uplift = rec_revenue_rate - baseline_revenue_rate
+        abs_case_uplift = rec_case_rate - baseline_case_rate
+        rel_revenue_uplift = ((rec_inr - baseline_inr) / max(baseline_inr, 1)) * 100.0
 
         results[model_key] = {
             "model_key": model_key,
@@ -265,13 +269,17 @@ def benchmark_all_models(num_cases: int = 5000, seed: int = 42):
             "p95_latency_ms": round(p95_latency, 3),
             "p99_latency_ms": round(p99_latency, 3),
             "recovered_inr": round(rec_inr, 2),
-            "recovery_rate_pct": round(rec_rate, 2),
-            "absolute_uplift_pct_points": round(abs_uplift, 2),
-            "relative_uplift_pct": round(rel_uplift, 2),
+            "revenue_recovery_rate_pct": round(rec_revenue_rate, 2),
+            "case_recovery_rate_pct": round(rec_case_rate, 2),
+            "recovery_rate_pct": round(rec_revenue_rate, 2),
+            "absolute_revenue_uplift_pp": round(abs_revenue_uplift, 2),
+            "absolute_case_uplift_pp": round(abs_case_uplift, 2),
+            "absolute_uplift_pct_points": round(abs_revenue_uplift, 2),
+            "relative_uplift_pct": round(rel_revenue_uplift, 2),
             "action_distribution": action_counts,
         }
 
-        print(f"      ROC-AUC: {roc_auc:.4f} | F1: {f1:.4f} | Recovery: {rec_rate:.2f}% (Uplift: +{abs_uplift:.2f} pp) | p99: {p99_latency:.2f}ms")
+        print(f"      ROC-AUC: {roc_auc:.4f} | F1: {f1:.4f} | Revenue: ₹{rec_inr:,.2f} ({rec_revenue_rate:.2f}%, Uplift: +{abs_revenue_uplift:.2f}pp) | Cases: {rec_case_rate:.2f}% | p99: {p99_latency:.2f}ms")
 
     # Select production champion based on recovery uplift and latency reliability
     sorted_by_uplift = sorted(results.values(), key=lambda x: x["recovered_inr"], reverse=True)
@@ -290,7 +298,7 @@ def benchmark_all_models(num_cases: int = 5000, seed: int = 42):
     prod_model_key = "RandomForest"
 
     diff_inr = results[champion_key]["recovered_inr"] - results[prod_model_key]["recovered_inr"]
-    diff_pp = results[champion_key]["recovery_rate_pct"] - results[prod_model_key]["recovery_rate_pct"]
+    diff_pp = results[champion_key]["revenue_recovery_rate_pct"] - results[prod_model_key]["revenue_recovery_rate_pct"]
 
     # Build comprehensive benchmark report
     benchmark_report = {
@@ -300,14 +308,16 @@ def benchmark_all_models(num_cases: int = 5000, seed: int = 42):
         "static_baseline": {
             "name": "Static 1-Rule-Per-Cause Baseline",
             "recovered_inr": round(baseline_inr, 2),
-            "recovery_rate_pct": round(baseline_rate, 2),
+            "revenue_recovery_rate_pct": round(baseline_revenue_rate, 2),
+            "case_recovery_rate_pct": round(baseline_case_rate, 2),
+            "recovery_rate_pct": round(baseline_revenue_rate, 2),
         },
         "models": results,
         "champion_model": champion_key,
         "production_selected_model": prod_model_key,
         "selection_rationale": (
             f"Production Engineering Trade-off: While {champion_key} achieves the highest raw benchmark recovery "
-            f"({results[champion_key]['recovery_rate_pct']:.1f}% vs {results[prod_model_key]['recovery_rate_pct']:.1f}%, "
+            f"({results[champion_key]['revenue_recovery_rate_pct']:.2f}% vs {results[prod_model_key]['revenue_recovery_rate_pct']:.2f}%, "
             f"+₹{diff_inr:,.2f} on this held-out partition), Random Forest is deliberately selected for production "
             f"deployment because it eliminates external C++ runtime dependencies, prevents native library version drift, "
             f"and provides transparent, deterministic bagging auditability in a regulated financial recovery workflow."
@@ -328,9 +338,15 @@ def benchmark_all_models(num_cases: int = 5000, seed: int = 42):
         "total_revenue_at_risk_inr": risk_inr,
         "baseline_recovered_inr": baseline_inr,
         "ml_recovered_inr": results[prod_model_key]["recovered_inr"],
-        "baseline_recovery_rate_pct": results[prod_model_key]["recovery_rate_pct"] - results[prod_model_key]["absolute_uplift_pct_points"],
-        "ml_recovery_rate_pct": results[prod_model_key]["recovery_rate_pct"],
-        "absolute_uplift_pct_points": results[prod_model_key]["absolute_uplift_pct_points"],
+        "baseline_revenue_recovery_rate_pct": round(baseline_revenue_rate, 2),
+        "baseline_case_recovery_rate_pct": round(baseline_case_rate, 2),
+        "baseline_recovery_rate_pct": round(baseline_revenue_rate, 2),
+        "ml_revenue_recovery_rate_pct": results[prod_model_key]["revenue_recovery_rate_pct"],
+        "ml_case_recovery_rate_pct": results[prod_model_key]["case_recovery_rate_pct"],
+        "ml_recovery_rate_pct": results[prod_model_key]["revenue_recovery_rate_pct"],
+        "absolute_revenue_uplift_pct_points": results[prod_model_key]["absolute_revenue_uplift_pp"],
+        "absolute_case_uplift_pct_points": results[prod_model_key]["absolute_case_uplift_pp"],
+        "absolute_uplift_pct_points": results[prod_model_key]["absolute_revenue_uplift_pp"],
         "relative_uplift_pct": results[prod_model_key]["relative_uplift_pct"],
         "roc_auc": results[prod_model_key]["roc_auc"],
         "precision": results[prod_model_key]["precision"],
@@ -348,13 +364,13 @@ def benchmark_all_models(num_cases: int = 5000, seed: int = 42):
 
     # Print summary table
     print("\n" + "=" * 90)
-    print(f"{'Model Name':<32} | {'ROC-AUC':<8} | {'F1-Score':<8} | {'Rec Rate':<10} | {'Uplift (pp)':<11} | {'p99 Latency':<10}")
+    print(f"{'Model Name':<32} | {'ROC-AUC':<8} | {'F1-Score':<8} | {'Revenue Rec':<11} | {'Uplift (pp)':<11} | {'p99 Latency':<10}")
     print("-" * 90)
-    print(f"{'Static Dunning Baseline':<32} | {'N/A':<8} | {'N/A':<8} | {baseline_rate:>8.2f}% | {'--':>11} | {'0.01ms':>10}")
+    print(f"{'Static Dunning Baseline':<32} | {'N/A':<8} | {'N/A':<8} | {baseline_revenue_rate:>9.2f}% | {'--':>11} | {'0.01ms':>10}")
     for k, v in results.items():
         marker = " [PROD]" if k == prod_model_key else ""
         name_str = f"{v['name']}{marker}"
-        print(f"{name_str:<32} | {v['roc_auc']:>8.4f} | {v['f1_score']:>8.4f} | {v['recovery_rate_pct']:>8.2f}% | {v['absolute_uplift_pct_points']:>+10.2f}% | {v['p99_latency_ms']:>8.2f}ms")
+        print(f"{name_str:<32} | {v['roc_auc']:>8.4f} | {v['f1_score']:>8.4f} | {v['revenue_recovery_rate_pct']:>9.2f}% | {v['absolute_revenue_uplift_pp']:>+10.2f}% | {v['p99_latency_ms']:>8.2f}ms")
     print("=" * 90)
 
     return benchmark_report
