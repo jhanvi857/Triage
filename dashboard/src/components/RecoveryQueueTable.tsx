@@ -31,6 +31,46 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
         </span>
       );
     }
+    if (c.status === "RETRY_SCHEDULED") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#3182CE]/10 text-[#3182CE] border border-[#3182CE]/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3182CE]" />
+          <span>Retry Scheduled</span>
+        </span>
+      );
+    }
+    if (c.status === "RETRY_IN_FLIGHT") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#D69E2E]/10 text-[#D69E2E] border border-[#D69E2E]/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#D69E2E] animate-pulse" />
+          <span>Retry In-Flight</span>
+        </span>
+      );
+    }
+    if (c.status === "RETRY_FAILED") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#E53E3E]/10 text-[#E53E3E] border border-[#E53E3E]/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#E53E3E]" />
+          <span>Retry Failed</span>
+        </span>
+      );
+    }
+    if (c.status === "PTP_COMMITTED") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#3182CE]/10 text-[#3182CE] border border-[#3182CE]/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3182CE]" />
+          <span>PTP Committed</span>
+        </span>
+      );
+    }
+    if (c.status === "PTP_MISSED") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#DD6B20]/10 text-[#DD6B20] border border-[#DD6B20]/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#DD6B20]" />
+          <span>PTP Missed</span>
+        </span>
+      );
+    }
     if (c.status === "INTERVENING" || c.status === "DIAGNOSED") {
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#087F83]/10 text-[#087F83] border border-[#087F83]/20">
@@ -119,6 +159,7 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
     }
     if (c.status === "NEW") return "Diagnose";
     if (c.status === "DIAGNOSED") return "Rank ML";
+    if (c.status === "RETRY_SCHEDULED") return "Payday Retry";
     if (c.status === "INTERVENING") return "Settle";
     if (c.status === "RECOVERED") return "Captured";
     return "Halted";

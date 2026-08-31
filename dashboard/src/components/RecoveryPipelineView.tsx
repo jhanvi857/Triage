@@ -14,7 +14,7 @@ interface RecoveryPipelineViewProps {
   processingId: string | null;
 }
 
-type StageFilter = "ALL" | "NEW" | "DIAGNOSED" | "INTERVENING" | "RECOVERED";
+type StageFilter = "ALL" | "NEW" | "DIAGNOSED" | "INTERVENING" | "PTP_COMMITTED" | "RECOVERED";
 type SourceFilter = "LIVE" | "SYNTHETIC" | "ALL";
 
 export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
@@ -40,11 +40,16 @@ export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
     NEW: sourceCases.filter((c) => c.status === "NEW").length,
     DIAGNOSED: sourceCases.filter((c) => c.status === "DIAGNOSED").length,
     INTERVENING: sourceCases.filter((c) => c.status === "INTERVENING").length,
+    PTP_COMMITTED: sourceCases.filter((c) => c.status === "PTP_COMMITTED" || c.status === "RETRY_SCHEDULED").length,
     RECOVERED: sourceCases.filter((c) => c.status === "RECOVERED").length,
   };
 
   const filteredCases =
-    stageFilter === "ALL" ? sourceCases : sourceCases.filter((c) => c.status === stageFilter);
+    stageFilter === "ALL"
+      ? sourceCases
+      : stageFilter === "PTP_COMMITTED"
+      ? sourceCases.filter((c) => c.status === "PTP_COMMITTED" || c.status === "RETRY_SCHEDULED")
+      : sourceCases.filter((c) => c.status === stageFilter);
 
   return (
     <div className="space-y-4 font-sans">
@@ -200,7 +205,7 @@ export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
       <div className="flex items-center space-x-2 text-[12px]">
         <Filter className="w-3.5 h-3.5 text-[#6F7777]" />
         <span className="text-[#6F7777] font-normal">Stage Filter:</span>
-        {(["ALL", "NEW", "DIAGNOSED", "INTERVENING", "RECOVERED"] as StageFilter[]).map((st) => (
+        {(["ALL", "NEW", "DIAGNOSED", "INTERVENING", "PTP_COMMITTED", "RECOVERED"] as StageFilter[]).map((st) => (
           <button
             key={st}
             onClick={() => setStageFilter(st)}
@@ -210,7 +215,7 @@ export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
                 : "bg-[#FFFFFF] text-[#6F7777] border-[#E2E5E5] hover:text-[#202525]"
             }`}
           >
-            {st} ({counts[st]})
+            {st === "PTP_COMMITTED" ? "PTP / SCHEDULED" : st} ({counts[st]})
           </button>
         ))}
       </div>

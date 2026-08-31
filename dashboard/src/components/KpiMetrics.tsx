@@ -19,14 +19,30 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({ liveCases }) => {
   // Compute strictly from LIVE storefront transactions
   const totalAtRiskINR = liveCases.reduce((sum, c) => sum + (c.amount_inr || (c.amount_paise / 100.0)), 0);
   
+  // STRICT ACCOUNTING: Only confirmed captured settlements increment recovered revenue
   const recoveredINR = liveCases
     .filter((c) => c.status === "RECOVERED")
     .reduce((sum, c) => sum + (c.recovered_amount_paise ? (c.recovered_amount_paise / 100.0) : c.amount_inr), 0);
 
+  // PTP & Scheduled Retry Committed Pipeline: Promised commitments and scheduled retries awaiting settlement date
+  const ptpCommittedCases = liveCases.filter(
+    (c) =>
+      c.status === "PTP_COMMITTED" ||
+      c.status === "RETRY_SCHEDULED" ||
+      (c.ptp_status?.promise_detected && c.status !== "RECOVERED")
+  );
+  const ptpCommittedINR = ptpCommittedCases.reduce((sum, c) => sum + (c.amount_inr || (c.amount_paise / 100.0)), 0);
+
   const recoveryRate = totalAtRiskINR > 0 ? (recoveredINR / totalAtRiskINR) * 100.0 : 0.0;
   
-  const activeInterventions = liveCases.filter((c) => c.status === "INTERVENING" || c.status === "DIAGNOSED" || c.status === "NEW").length;
-  const humanEscalations = liveCases.filter((c) => c.status === "ESCALATED" || c.status === "LOST").length;
+  const activeInterventions = liveCases.filter(
+    (c) =>
+      c.status === "INTERVENING" ||
+      c.status === "DIAGNOSED" ||
+      c.status === "NEW" ||
+      c.status === "PTP_COMMITTED" ||
+      c.status === "RETRY_SCHEDULED"
+  ).length;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
@@ -49,7 +65,7 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({ liveCases }) => {
         </div>
       </div>
 
-      {/* 2. Live Recovered */}
+      {/* 2. Live Recovered (Strict Confirmed Settlements) */}
       <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
@@ -67,12 +83,32 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({ liveCases }) => {
               <span>Idempotently settled on-rail</span>
             </>
           ) : (
-            <span className="text-[#6F7777]">0 recovered captures</span>
+            <span className="text-[#6F7777]">0 confirmed captures</span>
           )}
         </div>
       </div>
 
-      {/* 3. Live Recovery Rate */}
+      {/* 3. PTP / Scheduled Pipeline */}
+      <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
+            PTP / Scheduled
+          </span>
+          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-[#EBF8FF] text-[#2B6CB0] border border-[#BEE3F8] uppercase">
+            PIPELINE
+          </span>
+        </div>
+        <div className="font-mono text-[26px] font-bold text-[#2B6CB0] leading-tight">
+          {formatINR(ptpCommittedINR)}
+        </div>
+        <div className="text-[12px] font-normal text-[#6F7777] pt-0.5">
+          {ptpCommittedCases.length > 0
+            ? `${ptpCommittedCases.length} commitment${ptpCommittedCases.length === 1 ? "" : "s"} (₹0 recovered until settlement)`
+            : "No pending PTP commitments"}
+        </div>
+      </div>
+
+      {/* 4. Live Recovery Rate */}
       <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
@@ -84,23 +120,7 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({ liveCases }) => {
           {recoveryRate.toFixed(1)}%
         </div>
         <div className="text-[12px] font-medium text-[#2E7D5B] pt-0.5">
-          {liveCases.length === 0 ? "Awaiting first resolution" : `${liveCases.filter(c => c.status === "RECOVERED").length} of ${liveCases.length} resolved`}
-        </div>
-      </div>
-
-      {/* 4. Active In-Flight Interventions */}
-      <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] font-semibold text-[#6F7777] uppercase tracking-wider">
-            In-Flight Actions
-          </span>
-          <ShieldCheck className="w-4 h-4 text-[#0E4B4C]" />
-        </div>
-        <div className="font-mono text-[26px] font-bold text-[#0E4B4C] leading-tight">
-          {activeInterventions}
-        </div>
-        <div className="text-[12px] font-normal text-[#6F7777] pt-0.5">
-          {humanEscalations > 0 ? `${humanEscalations} escalated to human desk` : "Active policy interventions"}
+          {liveCases.length === 0 ? "Awaiting first resolution" : `${liveCases.filter(c => c.status === "RECOVERED").length} of ${liveCases.length} captured`}
         </div>
       </div>
     </div>

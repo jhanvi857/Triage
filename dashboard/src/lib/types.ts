@@ -2,6 +2,11 @@ export type CaseStatus =
   | "NEW"
   | "DIAGNOSED"
   | "INTERVENING"
+  | "RETRY_SCHEDULED"
+  | "RETRY_IN_FLIGHT"
+  | "RETRY_FAILED"
+  | "PTP_COMMITTED"
+  | "PTP_MISSED"
   | "RECOVERED"
   | "LOST"
   | "ESCALATED";
@@ -323,10 +328,26 @@ export interface TriageCase {
   max_attempts: number;
   next_retry_at?: string;
   recovered_amount_paise: number;
+  amount_refunded_paise?: number;
   incentive_discount_paise: number;
   razorpay_payment_id?: string;
   idempotency_key: string;
   notes?: string;
+  attempts?: Array<{
+    attempt_id: string;
+    case_id: string;
+    attempt_number: number;
+    action: string;
+    idempotency_key: string;
+    razorpay_payment_id?: string;
+    amount_at_risk_paise: number;
+    recovered_paise: number;
+    discount_paise?: number;
+    status: string;
+    failure_reason?: string;
+    created_at: string;
+    captured_at?: string;
+  }>;
   created_at: string;
   updated_at: string;
 }
@@ -336,10 +357,14 @@ export interface SummaryStats {
   total_at_risk_inr: number;
   total_recovered_paise: number;
   total_recovered_inr: number;
+  total_ptp_committed_paise?: number;
+  total_ptp_committed_inr?: number;
   recovery_rate_percent: number;
   unresolved_exceptions: number;
   total_cases: number;
   active_interventions: number;
+  ptp_outstanding?: number;
+  ptp_missed_count?: number;
   chain_verified: boolean;
   total_blocks: number;
 }

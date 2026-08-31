@@ -43,10 +43,10 @@ const COLUMNS: ColumnConfig[] = [
   {
     id: "col_intervening",
     title: "03 INTERVENING",
-    statuses: ["INTERVENING"],
+    statuses: ["INTERVENING", "RETRY_SCHEDULED", "RETRY_IN_FLIGHT", "RETRY_FAILED", "PTP_COMMITTED", "PTP_MISSED"],
     icon: Zap,
     accentColor: "text-[#F38630]",
-    desc: "Active rail retry or concession",
+    desc: "Active rail retry, scheduled retry, PTP, or concession",
   },
   {
     id: "col_recovered",
