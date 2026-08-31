@@ -54,7 +54,7 @@ type Decision struct {
 type Selector struct {
 	MaxAttemptsDefault   int
 	MaxIncentiveCapPaise int64 // ₹500 (50,000 paise)
-	HighValueThreshold   int64 // ₹10,000 (1,000,000 paise)
+	HighValueThreshold   int64 // ₹15,000 (1,500,000 paise)
 	MLClient             *mlclient.Client
 	EligibilityEngine    *EligibilityEngine
 }
@@ -64,7 +64,7 @@ func NewSelector() *Selector {
 	return &Selector{
 		MaxAttemptsDefault:   3,
 		MaxIncentiveCapPaise: 50000,   // ₹500 max concession per case
-		HighValueThreshold:   1000000, // ₹10,000
+		HighValueThreshold:   1500000, // ₹15,000 RBI mandate / enterprise automation ceiling
 		MLClient:             mlclient.NewClient("http://localhost:8000"),
 		EligibilityEngine:    NewEligibilityEngine(),
 	}
@@ -232,7 +232,7 @@ func (s *Selector) SelectIntervention(
 		vetoReason = "Security flag triggered: transaction flagged as suspected fraud. Directing to risk officer."
 	}
 
-	// Rule 4: High-Value Escalation Threshold (₹10,000)
+	// Rule 4: High-Value Escalation Threshold (₹15,000)
 	highValuePassed := amountPaise < s.HighValueThreshold
 	policyRules = append(policyRules, PolicyRuleEvaluation{
 		RuleName: "HIGH_VALUE_THRESHOLD",
@@ -242,7 +242,7 @@ func (s *Selector) SelectIntervention(
 	if !highValuePassed {
 		isVetoed = true
 		vetoAction = ActionEscalateHuman
-		vetoReason = fmt.Sprintf("High-value transaction (₹%.2f >= ₹10,000 threshold). Automated recovery vetoed; assigned to Senior Retention Desk.", float64(amountPaise)/100.0)
+		vetoReason = fmt.Sprintf("High-value transaction (₹%.2f >= ₹%.2f threshold). Automated recovery vetoed; assigned to Senior Retention Desk.", float64(amountPaise)/100.0, float64(s.HighValueThreshold)/100.0)
 	}
 
 	// Rule 5: Concession Budget Cap (≤5% of amount AND ≤₹500)

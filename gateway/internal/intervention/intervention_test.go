@@ -71,12 +71,12 @@ func TestIntervention_ContextualRankingAndPolicyVetoes(t *testing.T) {
 		t.Errorf("expected VETOED with MARK_LOST_EXHAUSTED, got verdict=%s action=%s", dec5.PolicyVerdict, dec5.Action)
 	}
 
-	// 6. High-Value Threshold Veto: Amount ₹12,500 >= ₹10,000 ceiling -> VETOED -> ESCALATE_HUMAN
+	// 6. High-Value Threshold Veto: Amount ₹25,000 >= ₹15,000 ceiling -> VETOED -> ESCALATE_HUMAN
 	repMandate := diagnosis.DiagnosticReport{
 		CaseID:    "CASE-06",
 		RootCause: diagnosis.CauseMandateRevoked,
 	}
-	dec6 := sel.SelectIntervention("CASE-06", repMandate, 0, 1250000, "NACH_MANDATE", 50000)
+	dec6 := sel.SelectIntervention("CASE-06", repMandate, 0, 2500000, "NACH_MANDATE", 50000)
 	if dec6.PolicyVerdict != "VETOED" || dec6.Action != ActionEscalateHuman {
 		t.Errorf("expected high-value transaction to be VETOED and escalated to human, got verdict=%s action=%s", dec6.PolicyVerdict, dec6.Action)
 	}

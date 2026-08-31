@@ -442,6 +442,6 @@ func BuildRecoveryContext(
 		IsPTPCandidateEligible:  true,
 		Hour:                    now.Hour(),
 		DayOfWeek:               int(now.Weekday()),
-		HighValueThresholdPaise: 1000000, // ₹10,000
+		HighValueThresholdPaise: 1500000, // ₹15,000
 	}
 }

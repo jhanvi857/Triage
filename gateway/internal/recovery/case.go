@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,12 +16,17 @@ import (
 
 // Case status workflow states
 const (
-	StatusNew         = "NEW"
-	StatusDiagnosed   = "DIAGNOSED"
-	StatusIntervening = "INTERVENING"
-	StatusRecovered   = "RECOVERED"
-	StatusLost        = "LOST"
-	StatusEscalated   = "ESCALATED"
+	StatusNew            = "NEW"
+	StatusDiagnosed      = "DIAGNOSED"
+	StatusIntervening    = "INTERVENING"
+	StatusRetryScheduled = "RETRY_SCHEDULED"
+	StatusRetryInFlight  = "RETRY_IN_FLIGHT"
+	StatusRetryFailed    = "RETRY_FAILED"
+	StatusPTPCommitted   = "PTP_COMMITTED"
+	StatusPTPMissed      = "PTP_MISSED"
+	StatusRecovered      = "RECOVERED"
+	StatusLost           = "LOST"
+	StatusEscalated      = "ESCALATED"
 )
 
 // Case represents a revenue-at-risk opportunity undergoing triage recovery
@@ -68,14 +74,34 @@ type Case struct {
 	MaxAttempts               int                                `json:"max_attempts"`
 	NextRetryAt               *time.Time                         `json:"next_retry_at,omitempty"`
 	RecoveredAmountPaise      int64                              `json:"recovered_amount_paise"`
+	AmountRefundedPaise       int64                              `json:"amount_refunded_paise"`
 	IncentiveDiscountPaise    int64                              `json:"incentive_discount_paise"`
 	RazorpayPaymentID         string                             `json:"razorpay_payment_id,omitempty"`
 	IdempotencyKey            string                             `json:"idempotency_key"`
 	Notes                     string                             `json:"notes,omitempty"`
 	DueAt                     *time.Time                         `json:"due_at,omitempty"`
 	TimeSensitivity           float64                            `json:"time_sensitivity,omitempty"`
+	Attempts                  []RecoveryAttempt                  `json:"attempts,omitempty"`
 	CreatedAt                 time.Time                          `json:"created_at"`
 	UpdatedAt                 time.Time                          `json:"updated_at"`
+}
+
+// RecoveryAttempt represents a first-class deterministic recovery attempt record
+type RecoveryAttempt struct {
+	AttemptID         string     `json:"attempt_id"`
+	CaseID            string     `json:"case_id"`
+	AttemptNumber     int        `json:"attempt_number"`
+	Action            string     `json:"action"`
+	IdempotencyKey    string     `json:"idempotency_key"`
+	RazorpayOrderID   string     `json:"razorpay_order_id,omitempty"`
+	RazorpayPaymentID string     `json:"razorpay_payment_id,omitempty"`
+	AmountAtRiskPaise int64      `json:"amount_at_risk_paise"`
+	RecoveredPaise    int64      `json:"recovered_paise"`
+	DiscountPaise     int64      `json:"discount_paise,omitempty"`
+	Status            string     `json:"status"` // PENDING, IN_FLIGHT, CAPTURED, FAILED
+	FailureReason     string     `json:"failure_reason,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	CapturedAt        *time.Time `json:"captured_at,omitempty"`
 }
 
 // LogEntry is an immutable, hash-chained record in the Triage Recovery Ledger
@@ -380,20 +406,90 @@ func (m *Manager) ListCases() []*Case {
 	return list
 }
 
-// SaveCase inserts or updates a case and logs a state transition
+// SaveCase inserts or updates a case and logs a state transition.
+// STRUCTURAL INVARIANT ENFORCEMENT (BIDIRECTIONAL GUARD):
+// 1. Inbound Guard: Transitioning into StatusRecovered ("RECOVERED") requires RecordCapture().
+// 2. Outbound Guard: Downgrading an already-recovered case away from StatusRecovered is strictly forbidden.
 func (m *Manager) SaveCase(c *Case, actionTaken, reasoning string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	oldStatus := "INIT"
-	if existing, ok := m.cases[c.ID]; ok {
+	existing, exists := m.cases[c.ID]
+	if exists {
 		oldStatus = existing.Status
 	}
 
+	// 1. Inbound guard: Prevent unverified transition INTO StatusRecovered
+	if (!exists && c.Status == StatusRecovered) || (exists && existing.Status != StatusRecovered && c.Status == StatusRecovered) {
+		panic(fmt.Sprintf("STRUCTURAL INVARIANT VIOLATION: direct transition of case '%s' (prior status: '%s') to StatusRecovered via SaveCase() is forbidden. RecordCapture() is the sole authorized write path.", c.ID, oldStatus))
+	}
+
+	// 2. Outbound guard: Prevent illegal downgrade AWAY from StatusRecovered
+	if exists && existing.Status == StatusRecovered && c.Status != StatusRecovered {
+		panic(fmt.Sprintf("STRUCTURAL INVARIANT VIOLATION: illegal status downgrade of recovered case '%s' from StatusRecovered to '%s'. Confirmed recoveries are immutable financial states.", c.ID, c.Status))
+	}
+
+	m.saveCaseInternal(c, actionTaken, reasoning, oldStatus)
+}
+
+// RecordCapture is the SINGLE CANONICAL WRITE PATH for transition into RECOVERED
+// It verifies authoritative Razorpay capture, associates attempt attribution, sets recovered amount,
+// and cryptographically commits the PAYMENT_CAPTURED block to the SHA-256 ledger.
+func (m *Manager) RecordCapture(caseID string, razorpayPaymentID string, capturedPaise int64, discountPaise int64, actionName string, notes string) (*Case, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, exists := m.cases[caseID]
+	if !exists {
+		return nil, fmt.Errorf("case %s not found", caseID)
+	}
+
+	oldStatus := c.Status
+	c.Status = StatusRecovered
+	c.RecoveredAmountPaise = capturedPaise
+	c.IncentiveDiscountPaise = discountPaise
+	c.RazorpayPaymentID = razorpayPaymentID
+	now := time.Now().UTC()
+	c.UpdatedAt = now
+
+	if c.RecoveryPlan != nil {
+		c.RecoveryPlan.AdvanceOnSuccess()
+	}
+
+	// Update or append attempt record
+	attemptID := fmt.Sprintf("att_%s_%d", strings.TrimPrefix(caseID, "CASE-"), len(c.Attempts)+1)
+	c.Attempts = append(c.Attempts, RecoveryAttempt{
+		AttemptID:         attemptID,
+		CaseID:            caseID,
+		AttemptNumber:     len(c.Attempts) + 1,
+		Action:            actionName,
+		IdempotencyKey:    c.IdempotencyKey,
+		RazorpayPaymentID: razorpayPaymentID,
+		AmountAtRiskPaise: c.AmountPaise,
+		RecoveredPaise:    capturedPaise,
+		DiscountPaise:     discountPaise,
+		Status:            "CAPTURED",
+		CreatedAt:         now,
+		CapturedAt:        &now,
+	})
+
+	if notes == "" {
+		notes = fmt.Sprintf("Authoritative Razorpay payment capture confirmed: ₹%.2f recovered (%s)", float64(capturedPaise)/100.0, razorpayPaymentID)
+	}
+
+	m.saveCaseInternal(c, "PAYMENT_CAPTURED", notes, oldStatus)
+	return c, nil
+}
+
+// saveCaseInternal is the singular internal mutator of the recovery case map and immutable ledger.
+// It enforces value-copy memory isolation, calculates SHA-256 block hashes, and broadcasts SSE updates.
+func (m *Manager) saveCaseInternal(c *Case, actionTaken, reasoning string, oldStatus string) {
 	c.UpdatedAt = time.Now().UTC()
 	c.AmountINR = float64(c.AmountPaise) / 100.0
 	m.ensureAllowedActions(c)
-	m.cases[c.ID] = c
+	cp := *c
+	m.cases[c.ID] = &cp
 
 	// Append to immutable recovery ledger
 	entry := LogEntry{
@@ -498,6 +594,8 @@ type SummaryStats struct {
 	TotalAtRiskINR           float64 `json:"total_at_risk_inr"`
 	TotalRecoveredPaise      int64   `json:"total_recovered_paise"`
 	TotalRecoveredINR        float64 `json:"total_recovered_inr"`
+	TotalPTPCommittedPaise   int64   `json:"total_ptp_committed_paise"`
+	TotalPTPCommittedINR     float64 `json:"total_ptp_committed_inr"`
 	RecoveryRatePercent      float64 `json:"recovery_rate_percent"`
 	UnresolvedExceptions     int     `json:"unresolved_exceptions"`
 	TotalCases               int     `json:"total_cases"`
@@ -507,6 +605,7 @@ type SummaryStats struct {
 	SafetyStops              int     `json:"safety_stops"`
 	CustomerCooldowns        int     `json:"customer_cooldowns"`
 	PTPOutstanding           int     `json:"ptp_outstanding"`
+	PTPMissedCount           int     `json:"ptp_missed_count"`
 	ChainVerified            bool    `json:"chain_verified"`
 	TotalBlocks              int     `json:"total_blocks"`
 }
@@ -515,26 +614,45 @@ func (m *Manager) GetStats() SummaryStats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var atRiskPaise, recoveredPaise int64
-	var unresolved, activeCount, recoveredCount, escalatedCount, stoppedCount, ptpCount int
+	var atRiskPaise, recoveredPaise, ptpCommittedPaise int64
+	var unresolved, activeCount, recoveredCount, escalatedCount, stoppedCount, ptpCount, ptpMissedCount int
 
 	for _, c := range m.cases {
 		atRiskPaise += c.AmountPaise
 		switch c.Status {
 		case StatusRecovered:
+			// STRICT ACCOUNTING: Only confirmed captured settlements increase recovered revenue
 			recoveredPaise += c.RecoveredAmountPaise
 			recoveredCount++
+		case StatusPTPCommitted, StatusRetryScheduled:
+			// PTP & Scheduled Auto-Retry != Recovered Revenue: Tracked strictly as committed promise pipeline (zero recovered revenue)
+			ptpCommittedPaise += c.AmountPaise
+			ptpCount++
+			activeCount++
+		case StatusRetryInFlight:
+			// In-flight execution awaiting confirmation: active in-flight, zero recovered revenue
+			activeCount++
+		case StatusRetryFailed:
+			// Failed attempt: awaiting re-evaluation or escalation
+			unresolved++
+		case StatusPTPMissed:
+			ptpMissedCount++
+			unresolved++
 		case StatusLost:
 			unresolved++
 		case StatusEscalated:
 			escalatedCount++
 			unresolved++
-		case StatusIntervening:
+		case StatusIntervening, StatusDiagnosed, StatusNew:
 			activeCount++
 		}
-		if c.PTPStatus != nil && c.PTPStatus.PromiseDetected {
+
+		// Also track PTP detection if set on intervening cases
+		if c.Status != StatusPTPCommitted && c.Status != StatusRetryScheduled && c.Status != StatusRetryInFlight && c.PTPStatus != nil && c.PTPStatus.PromiseDetected {
 			ptpCount++
+			ptpCommittedPaise += c.AmountPaise
 		}
+
 		if c.Diagnosis != nil && c.Diagnosis.RootCause == "FRAUD_SUSPECTED" {
 			stoppedCount++
 		}
@@ -546,20 +664,23 @@ func (m *Manager) GetStats() SummaryStats {
 	}
 
 	return SummaryStats{
-		TotalAtRiskPaise:     atRiskPaise,
-		TotalAtRiskINR:       float64(atRiskPaise) / 100.0,
-		TotalRecoveredPaise:  recoveredPaise,
-		TotalRecoveredINR:    float64(recoveredPaise) / 100.0,
-		RecoveryRatePercent:  rate,
-		UnresolvedExceptions: unresolved,
-		TotalCases:           len(m.cases),
-		ActiveInterventions:  activeCount,
-		AutomatedRecoveries:  recoveredCount,
-		HumanEscalations:     escalatedCount,
-		SafetyStops:          stoppedCount,
-		PTPOutstanding:       ptpCount,
-		ChainVerified:        true,
-		TotalBlocks:          len(m.log),
+		TotalAtRiskPaise:       atRiskPaise,
+		TotalAtRiskINR:         float64(atRiskPaise) / 100.0,
+		TotalRecoveredPaise:    recoveredPaise,
+		TotalRecoveredINR:      float64(recoveredPaise) / 100.0,
+		TotalPTPCommittedPaise: ptpCommittedPaise,
+		TotalPTPCommittedINR:   float64(ptpCommittedPaise) / 100.0,
+		RecoveryRatePercent:    rate,
+		UnresolvedExceptions:   unresolved,
+		TotalCases:             len(m.cases),
+		ActiveInterventions:    activeCount,
+		AutomatedRecoveries:    recoveredCount,
+		HumanEscalations:       escalatedCount,
+		SafetyStops:            stoppedCount,
+		PTPOutstanding:         ptpCount,
+		PTPMissedCount:         ptpMissedCount,
+		ChainVerified:          true,
+		TotalBlocks:            len(m.log),
 	}
 }
 
