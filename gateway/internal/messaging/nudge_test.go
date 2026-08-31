@@ -174,18 +174,17 @@ func TestNudgeAgent_ApprovedActionEnvelope(t *testing.T) {
 
 	envelope := ApprovedActionEnvelope{
 		CaseID:          "CASE-7231",
-		ApprovedAction:  intervention.ActionSwitchToSavedCard,
+		ApprovedAction:  intervention.ActionUpdatePaymentMethod,
 		CustomerName:    "Nexus Analytics Corp",
 		AmountPaise:     420000,
 		Currency:        "INR",
 		ScheduledAt:     "Immediate",
-		AllowedCTAs:     []string{"APPROVE_BACKUP_CARD", "UPDATE_PAYMENT_METHOD"},
-		AllowedClaims:   []string{"Use verified alternate Visa card"},
+		AllowedCTAs:     []string{"UPDATE_PAYMENT_METHOD", "HELP_DESK"},
+		AllowedClaims:   []string{"Update payment instrument"},
 		ForbiddenClaims: []string{"Payment captured", "Discount 50%"},
 		PaymentLink:     "https://rzp.io/i/7231",
-		RootCause:       "INSUFFICIENT_FUNDS",
-		AlternateCard:   "Visa •••• 4821",
-		Channel:         "WHATSAPP",
+		RootCause:       "EXPIRED_CARD",
+		Channel:         "EMAIL",
 		ExpiresAt:       time.Now().Add(24 * time.Hour),
 	}
 
@@ -193,8 +192,99 @@ func TestNudgeAgent_ApprovedActionEnvelope(t *testing.T) {
 	if !draft.SafetyValidated {
 		t.Errorf("Expected envelope-drafted nudge to pass validation: %v", draft.ValidationNotes)
 	}
-	if !strings.Contains(draft.Body, "Visa •••• 4821") {
-		t.Errorf("Expected draft to mention alternate card from envelope, got: %s", draft.Body)
+	if !strings.Contains(draft.Body, "expired") {
+		t.Errorf("Expected draft to mention card expiration from envelope, got: %s", draft.Body)
 	}
 }
+
+func TestNudgeAgent_SilentActionSuppression(t *testing.T) {
+	agent := NewNudgeAgent()
+
+	silentActions := []string{
+		intervention.ActionStop,
+		intervention.ActionRetrySameRailCooldown,
+		intervention.ActionSwitchToSavedCard,
+		intervention.ActionEscalateHuman,
+	}
+
+	for _, action := range silentActions {
+		if ShouldNotifyCustomer(action) {
+			t.Errorf("Expected action '%s' to be marked as CustomerFacing=false", action)
+		}
+
+		req := NudgeRequest{
+			ApprovedAction: action,
+			CustomerName:   "Test Corp",
+			AmountPaise:    500000,
+			Currency:       "INR",
+			PaymentLink:    "https://rzp.io/i/test",
+			RootCause:      "FRAUD_SUSPECTED",
+			Channel:        "EMAIL",
+		}
+
+		draft := agent.DraftNudge(req)
+		if draft.Body != "" {
+			t.Errorf("Expected silent action '%s' to have empty body (suppressed), got: %s", action, draft.Body)
+		}
+		if !draft.SafetyValidated {
+			t.Errorf("Expected silent action '%s' draft to be marked safe/suppressed, got: %v", action, draft.ValidationNotes)
+		}
+	}
+}
+
+func TestEmailService_PolicySuppressionRules(t *testing.T) {
+	es := NewEmailService()
+
+	// 1. Fraud stop must be suppressed
+	allowed, reason := es.ShouldSendEmailForCase("FRAUD_SUSPECTED", "STOP")
+	if allowed {
+		t.Errorf("Expected fraud stop to be suppressed, but got allowed: %s", reason)
+	}
+
+	// 2. Transient bank downtime cooldown must be suppressed
+	allowed, reason = es.ShouldSendEmailForCase("BANK_DOWNTIME_TIMEOUT", "RETRY_SAME_RAIL_COOLDOWN")
+	if allowed {
+		t.Errorf("Expected transient cooldown to be suppressed, but got allowed: %s", reason)
+	}
+
+	// 3. Customer action required must be allowed
+	allowed, _ = es.ShouldSendEmailForCase("EXPIRED_CARD", "UPDATE_PAYMENT_METHOD")
+	if !allowed {
+		t.Errorf("Expected expired card update payment method to be allowed for customer communication")
+	}
+
+	// 4. PTP must be allowed
+	allowed, _ = es.ShouldSendEmailForCase("INSUFFICIENT_FUNDS", "PROMISE_TO_PAY")
+	if !allowed {
+		t.Errorf("Expected PTP to be allowed for customer communication")
+	}
+}
+
+func TestEmailService_EventDrivenDispatchers(t *testing.T) {
+	es := NewEmailService()
+
+	// Test Demo Account handling for all event-driven email methods
+	to := "user@example.com"
+
+	resAction := es.SendActionRequiredEmail(to, "Rahul", "CASE-001", "Enterprise Cloud", 4800.0, "Card expired", "http://localhost:5173/status/CASE-001")
+	if resAction.Status != "SKIPPED_DEMO_ACCOUNT" || !resAction.IsDemoAccount {
+		t.Errorf("Expected SKIPPED_DEMO_ACCOUNT for demo email, got: %s", resAction.Status)
+	}
+
+	resPTP := es.SendPTPConfirmationEmail(to, "Rahul", "CASE-001", "Enterprise Cloud", 4800.0, "05 Sep 2026", "http://localhost:5173/status/CASE-001")
+	if resPTP.Status != "SKIPPED_DEMO_ACCOUNT" || !resPTP.IsDemoAccount {
+		t.Errorf("Expected SKIPPED_DEMO_ACCOUNT for PTP confirmation email, got: %s", resPTP.Status)
+	}
+
+	resRetry := es.SendRetryScheduledEmail(to, "Rahul", "CASE-001", "Enterprise Cloud", 4800.0, "01 Sep 2026", "http://localhost:5173/status/CASE-001")
+	if resRetry.Status != "SKIPPED_DEMO_ACCOUNT" || !resRetry.IsDemoAccount {
+		t.Errorf("Expected SKIPPED_DEMO_ACCOUNT for retry scheduled email, got: %s", resRetry.Status)
+	}
+
+	resReceipt := es.SendReceiptEmail(to, "Rahul", "CASE-001", "Enterprise Cloud", 4800.0, "pay_rec_001")
+	if resReceipt.Status != "SKIPPED_DEMO_ACCOUNT" || !resReceipt.IsDemoAccount {
+		t.Errorf("Expected SKIPPED_DEMO_ACCOUNT for payment receipt email, got: %s", resReceipt.Status)
+	}
+}
+
 

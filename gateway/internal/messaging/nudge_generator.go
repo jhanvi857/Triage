@@ -2,7 +2,6 @@ package messaging
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ledger/gateway/internal/intervention"
@@ -57,6 +56,94 @@ type NudgeRequest struct {
 	Channel             string   `json:"channel"` // "WHATSAPP", "EMAIL", "SMS"
 }
 
+// NotificationPolicy defines whether an approved recovery action is customer-facing or silent/internal
+type NotificationPolicy struct {
+	CustomerFacing bool
+	Channel        string // Default preferred channel: "EMAIL", "WHATSAPP", "SMS"
+	TemplateKey    string
+	Description    string
+}
+
+// ActionNotificationLookup is the single source of truth for customer-facing communication eligibility
+var ActionNotificationLookup = map[string]NotificationPolicy{
+	// Customer-Facing Actions (Requires customer awareness or direct action via Email)
+	intervention.ActionRetryNextPaydayWindow: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "PAYDAY_SCHEDULE_NOTIFICATION",
+		Description:    "Informs customer via email that retry is scheduled for their payday funding cycle to prevent overdraft fees",
+	},
+	intervention.ActionUpdatePaymentMethod: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "UPDATE_PAYMENT_METHOD",
+		Description:    "Mandatory customer action to replace expired / dead card instrument",
+	},
+	intervention.ActionPromiseToPay: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "PROMISE_TO_PAY_CONFIRMATION",
+		Description:    "Confirms conversational date commitment or sends reminder for promised payment",
+	},
+	intervention.ActionCollectOutstandingPayment: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "INVOICE_REMINDER",
+		Description:    "Corporate Net-30 GST invoice reminder for outstanding subscription balance",
+	},
+	intervention.ActionResumeCheckout: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "RESUME_CHECKOUT_NUDGE",
+		Description:    "Abandoned checkout / OTP drop-off 1-click recovery link",
+	},
+	intervention.ActionReauthorizeMandate: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "REAUTHORIZE_MANDATE",
+		Description:    "1-click mandate re-linking authorization link for revoked recurring billing",
+	},
+	intervention.ActionSwitchToAvailableAlternateRail: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "SWITCH_TO_UPI",
+		Description:    "Instant alternative payment rail link when primary rail is blocked",
+	},
+	intervention.ActionIncentiveDiscount: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "DISCOUNT_NUDGE",
+		Description:    "Commercial concession to prevent churn on price-sensitive decline",
+	},
+
+	// Silent / Internal Actions (NEVER email or notify customer directly)
+	intervention.ActionSwitchToSavedCard: {
+		CustomerFacing: false, // Silent-then-notify-on-result: auto-retry vaulted card silently
+		Description:    "Silent background retry on secondary vaulted instrument; notify only upon final settlement result",
+	},
+	intervention.ActionRetrySameRailCooldown: {
+		CustomerFacing: false,
+		Description:    "Silent automated retry for transient bank downtime blip; zero customer friction",
+	},
+	intervention.ActionStop: {
+		CustomerFacing: false,
+		Description:    "Terminal stop / fraud risk; internal quarantine without customer messaging",
+	},
+	intervention.ActionEscalateHuman: {
+		CustomerFacing: false,
+		Description:    "Internal routing to ops/support concierge queue; not a customer-facing nudge",
+	},
+}
+
+// ShouldNotifyCustomer checks if a policy-approved action warrants a customer-facing notification
+func ShouldNotifyCustomer(action string) bool {
+	pol, exists := ActionNotificationLookup[action]
+	if !exists {
+		return false
+	}
+	return pol.CustomerFacing
+}
+
 // NudgeAgent generates policy-constrained customer communications downstream of authorization.
 // STRICT ARCHITECTURAL RULE: Generative AI drafts copy ONLY for an already-approved action.
 // Zero financial decision authority, zero payment API access.
@@ -89,28 +176,30 @@ func (na *NudgeAgent) DraftNudgeFromEnvelope(env ApprovedActionEnvelope) Custome
 	return na.DraftNudge(req)
 }
 
-// DraftNudge synthesizes personalized, empathetic, multi-channel copy for an approved recovery action
+// DraftNudge synthesizes personalized, empathetic email copy for an approved recovery action
 func (na *NudgeAgent) DraftNudge(req NudgeRequest) CustomerNudgeDraft {
-	channel := strings.ToUpper(req.Channel)
-	if channel == "" {
-		channel = "WHATSAPP"
+	channel := "EMAIL"
+	now := time.Now().UTC()
+
+	// Gate 1: Check Action Notification Policy (CustomerFacing vs Silent/Internal)
+	if !ShouldNotifyCustomer(req.ApprovedAction) {
+		return CustomerNudgeDraft{
+			ApprovedAction:  req.ApprovedAction,
+			Channel:         channel,
+			Headline:        "Internal Ops Action (Silent)",
+			Body:            "",
+			PrimaryCTA:      "",
+			ActionURL:       "",
+			ModelUsed:       "Silent Enforcement (Policy Gated)",
+			SafetyValidated: true,
+			ValidationNotes: []string{fmt.Sprintf("Action '%s' is categorized as silent/internal under policy; customer communication suppressed", req.ApprovedAction)},
+			GeneratedAt:     now.Format(time.RFC3339),
+		}
 	}
 
 	amountFormatted := fmt.Sprintf("₹%.2f", float64(req.AmountPaise)/100.0)
-	now := time.Now().UTC()
 
-	var draft CustomerNudgeDraft
-
-	switch channel {
-	case "WHATSAPP":
-		draft = na.draftWhatsApp(req, amountFormatted, now)
-	case "EMAIL":
-		draft = na.draftEmail(req, amountFormatted, now)
-	case "SMS":
-		draft = na.draftSMS(req, amountFormatted, now)
-	default:
-		draft = na.draftWhatsApp(req, amountFormatted, now)
-	}
+	draft := na.draftEmail(req, amountFormatted, now)
 
 	// Run rigorous Nudge Output Validator
 	valResult := na.Validator.Validate(draft, req)
@@ -245,6 +334,31 @@ func (na *NudgeAgent) draftEmail(req NudgeRequest, amount string, now time.Time)
 		subject = "Action Required: Update your expired payment method"
 		body = fmt.Sprintf("Dear %s,\n\nYour stored card has expired, preventing the renewal of your subscription (%s).\n\nPlease take a moment to provide an updated payment instrument (credit/debit card, UPI, or Netbanking) using our secure portal.", req.CustomerName, amount)
 		primaryCTA = "Update Payment Method"
+
+	case intervention.ActionPromiseToPay:
+		subject = fmt.Sprintf("Confirmed: Promise-to-Pay Scheduled for %s", req.ScheduledAt)
+		body = fmt.Sprintf("Dear %s,\n\nWe have recorded your promise to pay %s on %s.\n\nYour subscription compute quota remains reserved. You can view or settle early using the link below.", req.CustomerName, amount, req.ScheduledAt)
+		primaryCTA = "View Payment Details"
+
+	case intervention.ActionCollectOutstandingPayment:
+		subject = fmt.Sprintf("Invoice Reminder: Outstanding Balance of %s", amount)
+		body = fmt.Sprintf("Dear %s,\n\nThis is a reminder regarding your outstanding subscription invoice of %s.\n\nPlease click below to securely settle your balance via your preferred payment rail.", req.CustomerName, amount)
+		primaryCTA = "Settle Invoice"
+
+	case intervention.ActionResumeCheckout:
+		subject = fmt.Sprintf("Resume Your Checkout for %s", amount)
+		body = fmt.Sprintf("Dear %s,\n\nWe noticed your verification was interrupted during checkout for %s.\n\nClick below to complete your order in 1 click.", req.CustomerName, amount)
+		primaryCTA = "Complete Verification"
+
+	case intervention.ActionReauthorizeMandate:
+		subject = fmt.Sprintf("Action Required: Re-Authorize Autopay Mandate for %s", amount)
+		body = fmt.Sprintf("Dear %s,\n\nYour recurring autopay mandate for %s was interrupted by your bank.\n\nPlease re-authorize your mandate in 1 step to keep your compute active.", req.CustomerName, amount)
+		primaryCTA = "Re-Authorize Mandate"
+
+	case intervention.ActionIncentiveDiscount:
+		subject = fmt.Sprintf("Special Offer: Complete Your Renewal for %s", amount)
+		body = fmt.Sprintf("Dear %s,\n\nWe would love to keep you as a customer. An instant discount has been applied to your renewal of %s.\n\nClick below to claim your concession and maintain uninterrupted access.", req.CustomerName, amount)
+		primaryCTA = "Claim Discount & Pay"
 
 	default:
 		body = fmt.Sprintf("Dear %s,\n\nWe encountered a difficulty processing your payment of %s. Please review your account billing page to resolve.", req.CustomerName, amount)
