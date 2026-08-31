@@ -670,13 +670,13 @@ body {
   gap: 0.4rem;
 }
 
-.stepper-steps {
+.stepper-steps, .stepper-track {
   display: flex;
   justify-content: space-between;
   position: relative;
 }
 
-.stepper-steps::before {
+.stepper-steps::before, .stepper-track::before {
   content: '';
   position: absolute;
   top: 14px;
@@ -846,7 +846,8 @@ body {
   box-shadow: 0 0 0 1px var(--accent-color);
 }
 
-.retry-schedule-grid {
+.retry-schedule-grid,
+.retry-times-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.75rem;
@@ -1032,4 +1033,456 @@ body {
 .refusal-rule-item:last-child {
   margin-bottom: 0;
 }
+
+/* ==========================================================================
+   Customer Portal Page Styles
+   ========================================================================== */
+.portal-wrap {
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  padding-bottom: 4rem;
+}
+
+.portal-container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.portal-hero {
+  background: linear-gradient(135deg, #1E1E1C 0%, #2D3748 100%);
+  color: #FFFFFF;
+  border-radius: 16px;
+  padding: 2rem 2.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+.portal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  background: rgba(47, 133, 90, 0.25);
+  color: #68D391;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgba(104, 211, 145, 0.4);
+  margin-bottom: 0.5rem;
+}
+
+.portal-hero-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+}
+
+.portal-hero-subtitle {
+  font-size: 0.88rem;
+  color: #A0AEC0;
+  margin-top: 0.25rem;
+}
+
+.portal-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.portal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.portal-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.portal-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portal-icon-box.danger {
+  background: var(--danger-light);
+  color: var(--danger-color);
+}
+
+.portal-icon-box.success {
+  background: var(--accent-light);
+  color: var(--accent-color);
+}
+
+.portal-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.portal-card-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.portal-invoice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.portal-invoice-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.portal-invoice-item:hover {
+  background: #FFFFFF;
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.portal-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.portal-status-chip.retry {
+  background: #EBF8FF;
+  color: #2B6CB0;
+  border: 1px solid #BEE3F8;
+}
+
+.portal-status-chip.in-flight {
+  background: #FEFCBF;
+  color: #B7791F;
+  border: 1px solid #FAF089;
+}
+
+.portal-status-chip.failed {
+  background: #FFF5F5;
+  color: #C53030;
+  border: 1px solid #FEB2B2;
+}
+
+.portal-status-chip.ptp {
+  background: #FAF5FF;
+  color: #6B46C1;
+  border: 1px solid #E9D8FD;
+}
+
+.portal-status-chip.missed {
+  background: #FFFAF0;
+  color: #DD6B20;
+  border: 1px solid #FBD38D;
+}
+
+.portal-status-chip.escalated {
+  background: #FEFCBF;
+  color: #744210;
+  border: 1px solid #F6E05E;
+}
+
+.portal-status-chip.action-required {
+  background: var(--danger-light);
+  color: var(--danger-color);
+  border: 1px solid var(--danger-border);
+}
+
+.btn-secondary-portal {
+  background: var(--surface-color);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn-secondary-portal:hover {
+  background: var(--surface-subtle);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+
+.portal-login-box {
+  max-width: 440px;
+  margin: 3rem auto;
+  background: var(--surface-color);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 2.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.portal-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+  background: #FFFFFF;
+  margin-bottom: 1rem;
+}
+
+.portal-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.portal-quick-account-btn {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  transition: background 0.15s;
+}
+
+.portal-quick-account-btn:hover {
+  background: #EBEBE6;
+}
+
+/* ==========================================================================
+   Interactive Checkout & Failure Simulator Modal Styles
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 100;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+.modal-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  max-width: 620px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+  animation: modalSlideUp 0.25s ease-out;
+}
+
+.modal-header {
+  padding: 1.5rem 1.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: var(--surface-subtle);
+}
+
+.modal-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 0.25rem;
+}
+
+.modal-header p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
+}
+
+.sandbox-badge {
+  display: inline-block;
+  background: #FEFCBF;
+  color: #744210;
+  border: 1px solid #F6E05E;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.close-btn:hover {
+  background: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.scenarios-list {
+  padding: 1.5rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.scenarios-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+
+.scenario-btn {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface-subtle);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.scenario-btn:hover {
+  background: #FFFFFF;
+  border-color: var(--accent-color);
+  box-shadow: 0 6px 16px rgba(47, 133, 90, 0.1);
+  transform: translateY(-1px);
+}
+
+.scenario-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.scenario-btn:hover .scenario-icon {
+  background: var(--accent-light);
+}
+
+.scenario-info {
+  flex: 1;
+}
+
+.scenario-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.scenario-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.scenario-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.scenario-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.processing-state {
+  text-align: center;
+  padding: 3.5rem 2rem;
+}
+
+.processing-state h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.processing-state p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 
