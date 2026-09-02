@@ -79,6 +79,31 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               <div className="font-mono text-base font-bold text-[#182628] mt-0.5">
                 ₹{caseItem.amount_inr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </div>
+              {caseItem.incentive_discount_paise > 0 ? (() => {
+                const totalPaise = caseItem.amount_paise || (caseItem.amount_inr * 100);
+                const pct = totalPaise > 0 ? (caseItem.incentive_discount_paise / totalPaise) * 100 : 5;
+                const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+                return (
+                  <div className="text-[10px] font-mono text-[#087F83] font-semibold mt-0.5">
+                    -₹{(caseItem.incentive_discount_paise / 100).toFixed(2)} ({pctStr} Concession) &bull; Net: ₹{((caseItem.amount_inr * 100 - caseItem.incentive_discount_paise) / 100).toFixed(2)}
+                  </div>
+                );
+              })() : (
+                (caseItem.intervention?.action === "INCENTIVE_DISCOUNT" ||
+                  ((caseItem.diagnosis?.root_cause === "INSUFFICIENT_FUNDS" || caseItem.error_code === "INSUFFICIENT_FUNDS") &&
+                    caseItem.available_balance_inr !== undefined &&
+                    caseItem.available_balance_inr < caseItem.amount_inr &&
+                    caseItem.available_balance_inr >= caseItem.amount_inr - Math.min(0.05 * caseItem.amount_inr, 500))) && (() => {
+                  const discountINR = Math.min(0.05 * caseItem.amount_inr, 500);
+                  const pct = caseItem.amount_inr > 0 ? (discountINR / caseItem.amount_inr) * 100 : 5;
+                  const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+                  return (
+                    <div className="text-[10px] font-mono text-[#087F83] font-semibold mt-0.5">
+                      -₹{discountINR.toFixed(2)} ({pctStr} off) &bull; Net: ₹{(caseItem.amount_inr - discountINR).toFixed(2)}
+                    </div>
+                  );
+                })()
+              )}
             </div>
             <div>
               <span className="font-sans text-[10px] text-[#506361] uppercase tracking-wide">
@@ -138,11 +163,25 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               <p className="text-xs font-sans text-[#506361] leading-relaxed break-words">
                 {caseItem.intervention.reasoning}
               </p>
-              {caseItem.intervention.incentive_amount_paise ? (
-                <div className="text-xs font-sans px-2.5 py-1.5 rounded bg-[#FFFFFF] border border-[#CAD4C5] text-[#182628]">
-                  Concession Budget Applied: <strong className="font-mono text-[#267571]">₹{(caseItem.intervention.incentive_amount_paise / 100).toFixed(2)}</strong> (Capped by Token Budget)
-                </div>
-              ) : null}
+              {caseItem.incentive_discount_paise > 0 ? (() => {
+                const totalPaise = caseItem.amount_paise || (caseItem.amount_inr * 100);
+                const pct = totalPaise > 0 ? (caseItem.incentive_discount_paise / totalPaise) * 100 : 5;
+                const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+                return (
+                  <div className="text-xs font-sans px-2.5 py-1.5 rounded bg-[#FFFFFF] border border-[#CAD4C5] text-[#182628]">
+                    {pctStr} Instant Concession Applied: <strong className="font-mono text-[#267571]">₹{(caseItem.incentive_discount_paise / 100).toFixed(2)}</strong> &bull; Net Recovered: <strong className="font-mono text-[#267571]">₹{(caseItem.recovered_amount_paise / 100).toFixed(2)}</strong>
+                  </div>
+                );
+              })() : caseItem.intervention?.incentive_amount_paise ? (() => {
+                const totalPaise = caseItem.amount_paise || (caseItem.amount_inr * 100);
+                const pct = totalPaise > 0 ? (caseItem.intervention.incentive_amount_paise / totalPaise) * 100 : 5;
+                const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+                return (
+                  <div className="text-xs font-sans px-2.5 py-1.5 rounded bg-[#FFFFFF] border border-[#CAD4C5] text-[#182628]">
+                    {pctStr} Solvency Bridge Concession: <strong className="font-mono text-[#267571]">₹{(caseItem.intervention.incentive_amount_paise / 100).toFixed(2)}</strong> &bull; Net Payable: <strong className="font-mono text-[#267571]">₹{((caseItem.amount_paise - caseItem.intervention.incentive_amount_paise) / 100).toFixed(2)}</strong>
+                  </div>
+                );
+              })() : null}
             </div>
           )}
 

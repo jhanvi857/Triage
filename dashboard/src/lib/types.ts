@@ -7,6 +7,7 @@ export type CaseStatus =
   | "RETRY_FAILED"
   | "PTP_COMMITTED"
   | "PTP_MISSED"
+  | "HUMAN_RESOLVED"
   | "RECOVERED"
   | "LOST"
   | "ESCALATED";
@@ -21,6 +22,13 @@ export interface DiagnosticReport {
   requires_human_review?: boolean;
   recommended_action: string;
   diagnosed_at: string;
+}
+
+export interface PTPAgingBreakdown {
+  due_within_48h: number;
+  due_in_3_to_7d: number;
+  due_beyond_7d: number;
+  avg_days_to_promised_date: number;
 }
 
 export interface RankedCandidate {
@@ -191,7 +199,14 @@ export interface PortfolioPlan {
   portfolio_roi_multiple: number;
   cases_allocated_discount: number;
   cases_allocated_human_desk: number;
+  cases_allocated_ptp?: number;
   cases_routed_zero_cost_fallback: number;
+  total_ptp_promised_paise?: number;
+  total_ptp_promised_inr?: number;
+  active_promises_count?: number;
+  historical_kept_rate?: number;
+  historical_broken_rate?: number;
+  ptp_aging_breakdown?: PTPAgingBreakdown;
   decisions: AllocationDecision[];
   optimization_method: string;
 }
@@ -298,6 +313,8 @@ export interface TriageCase {
   plan_name: string;
   amount_paise: number;
   amount_inr: number;
+  available_balance_paise?: number;
+  available_balance_inr?: number;
   currency: string;
   original_rail: string;
   error_code: string;

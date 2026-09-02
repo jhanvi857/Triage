@@ -115,13 +115,10 @@ export const TriageCaseCard: React.FC<TriageCaseCardProps> = ({
           </span>
           {caseItem.source === "LIVE" ? (
             <span
-              className={`px-1.5 py-0.5 rounded-sm text-[8px] font-mono font-bold tracking-wider uppercase border ${
-                caseItem.is_simulated
-                  ? "bg-[#FFFAF0] text-[#DD6B20] border-[#FEEBC8]"
-                  : "bg-[#EBF8F2] text-[#2F855A] border-[#C6F6D5]"
-              }`}
+              title={caseItem.is_simulated ? "Live customer storefront event (Razorpay Sandbox mode)" : "HMAC-verified live webhook"}
+              className="px-1.5 py-0.5 rounded-sm text-[8px] font-mono font-bold tracking-wider uppercase border bg-[#EBF8F2] text-[#2F855A] border-[#C6F6D5]"
             >
-              {caseItem.is_simulated ? "LIVE · SIMULATED" : "LIVE · VERIFIED"}
+              {caseItem.is_simulated ? "LIVE · SANDBOX" : "LIVE · HMAC VERIFIED"}
             </span>
           ) : (
             <span className="px-1.5 py-0.5 rounded-sm text-[8px] font-mono font-bold tracking-wider uppercase border bg-[#F5F6F6] text-[#506361] border-[#E2E5E5]">
@@ -159,6 +156,31 @@ export const TriageCaseCard: React.FC<TriageCaseCardProps> = ({
             </span>
           </div>
         )}
+        {caseItem.incentive_discount_paise > 0 ? (() => {
+          const totalPaise = caseItem.amount_paise || (caseItem.amount_inr * 100);
+          const pct = totalPaise > 0 ? (caseItem.incentive_discount_paise / totalPaise) * 100 : 5;
+          const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+          return (
+            <div className="flex items-baseline justify-between text-[10px] text-[#087F83] font-semibold pt-0.5">
+              <span className="font-sans">{pctStr} Concession:</span>
+              <span className="font-mono font-bold">-₹{(caseItem.incentive_discount_paise / 100).toFixed(2)}</span>
+            </div>
+          );
+        })() : (caseItem.intervention?.action === "INCENTIVE_DISCOUNT" ||
+          ((caseItem.diagnosis?.root_cause === "INSUFFICIENT_FUNDS" || caseItem.error_code === "INSUFFICIENT_FUNDS") &&
+            caseItem.available_balance_inr !== undefined &&
+            caseItem.available_balance_inr < caseItem.amount_inr &&
+            caseItem.available_balance_inr >= caseItem.amount_inr - Math.min(0.05 * caseItem.amount_inr, 500))) ? (() => {
+          const discountINR = Math.min(0.05 * caseItem.amount_inr, 500);
+          const pct = caseItem.amount_inr > 0 ? (discountINR / caseItem.amount_inr) * 100 : 5;
+          const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+          return (
+            <div className="flex items-baseline justify-between text-[10px] text-[#087F83] font-semibold pt-0.5">
+              <span className="font-sans">{pctStr} Concession:</span>
+              <span className="font-mono font-bold">Net ₹{(caseItem.amount_inr - discountINR).toFixed(0)}</span>
+            </div>
+          );
+        })() : null}
       </div>
 
       {/* 4. Cause of Failure */}

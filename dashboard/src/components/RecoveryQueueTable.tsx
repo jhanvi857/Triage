@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { ArrowRight, CheckCircle2, Radio, Sparkles } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { ArrowRight, CheckCircle2, Radio, Sparkles, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { TriageCase } from "../lib/types";
 
@@ -59,7 +59,7 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#3182CE]/10 text-[#3182CE] border border-[#3182CE]/20">
           <span className="w-1.5 h-1.5 rounded-full bg-[#3182CE]" />
-          <span>PTP Committed</span>
+          <span>Promised (Pending)</span>
         </span>
       );
     }
@@ -68,6 +68,14 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#DD6B20]/10 text-[#DD6B20] border border-[#DD6B20]/20">
           <span className="w-1.5 h-1.5 rounded-full bg-[#DD6B20]" />
           <span>PTP Missed</span>
+        </span>
+      );
+    }
+    if (c.status === "HUMAN_RESOLVED") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#2B6CB0]/10 text-[#2B6CB0] border border-[#2B6CB0]/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#2B6CB0]" />
+          <span>Human Resolved</span>
         </span>
       );
     }
@@ -107,16 +115,22 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
     if (c.source === "LIVE") {
       if (c.is_simulated) {
         return (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-[#FFFAF0] text-[#DD6B20] border border-[#FEEBC8] whitespace-nowrap">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#DD6B20]" />
-            <span>LIVE · SIMULATED</span>
+          <span
+            title="Real live checkout from customer storefront (Razorpay Sandbox mode — safe test-mode capture, real customer workflow)"
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-[#EBF8F2] text-[#2F855A] border border-[#C6F6D5] whitespace-nowrap"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#2F855A] animate-pulse" />
+            <span>LIVE · SANDBOX</span>
           </span>
         );
       }
       return (
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-[#EBF8F2] text-[#2F855A] border border-[#C6F6D5] whitespace-nowrap">
+        <span
+          title="Cryptographically verified live webhook from Razorpay API"
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-[#EBF8F2] text-[#2F855A] border border-[#C6F6D5] whitespace-nowrap"
+        >
           <span className="w-1.5 h-1.5 rounded-full bg-[#2F855A] animate-pulse" />
-          <span>LIVE · VERIFIED</span>
+          <span>LIVE · HMAC VERIFIED</span>
         </span>
       );
     }
@@ -152,6 +166,7 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
       if (act === "COLLECT_OUTSTANDING_PAYMENT") return "Collect Invoice";
       if (act === "PROMISE_TO_PAY") return "Promise to Pay";
       if (act === "RETRY_SAME_RAIL_COOLDOWN" || act === "RETRY_LATER") return "Cooldown Retry";
+      if (act === "INCENTIVE_DISCOUNT") return "Concession";
       if (act === "ESCALATE_HUMAN") return "Human Desk";
       if (act === "STOP") return "Risk Stop";
       if (act === "MARK_LOST_EXHAUSTED") return "Mark Lost";
@@ -250,8 +265,28 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
                       </td>
 
                       {/* Amount */}
-                      <td className="py-3 px-4 text-right font-mono font-bold text-[13px] text-[#202525] whitespace-nowrap">
-                        ₹{c.amount_inr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      <td className="py-3 px-4 text-right font-mono text-[13px] text-[#202525] whitespace-nowrap">
+                        <div className="font-bold">
+                          ₹{c.amount_inr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </div>
+                        {c.incentive_discount_paise > 0 ? (
+                          <div className="text-[10px] text-[#087F83] font-semibold">
+                            -₹{(c.incentive_discount_paise / 100).toFixed(0)} &bull; Net ₹{((c.amount_inr * 100 - c.incentive_discount_paise) / 100).toFixed(0)}
+                          </div>
+                        ) : (c.intervention?.action === "INCENTIVE_DISCOUNT" ||
+                          ((c.diagnosis?.root_cause === "INSUFFICIENT_FUNDS" || c.error_code === "INSUFFICIENT_FUNDS") &&
+                            c.available_balance_inr !== undefined &&
+                            c.available_balance_inr < c.amount_inr &&
+                            c.available_balance_inr >= c.amount_inr - Math.min(0.05 * c.amount_inr, 500))) ? (() => {
+                          const discINR = Math.min(0.05 * c.amount_inr, 500);
+                          const pct = c.amount_inr > 0 ? (discINR / c.amount_inr) * 100 : 5;
+                          const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+                          return (
+                            <div className="text-[10px] text-[#087F83] font-semibold">
+                              Net ₹{(c.amount_inr - discINR).toFixed(0)} ({pctStr} off)
+                            </div>
+                          );
+                        })() : null}
                       </td>
 
                       {/* Customer / Plan */}
