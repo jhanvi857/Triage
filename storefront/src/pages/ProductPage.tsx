@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  Check, 
-  CreditCard, 
-  Clock, 
-  Building2, 
-  Ban, 
-  Lock, 
+import {
+  Check,
+  CreditCard,
+  Clock,
+  Building2,
+  Ban,
+  Lock,
   Server,
   Zap,
   X,
   AlertOctagon,
   User,
   ShieldCheck,
-  Mail,
-  LogOut,
   type LucideIcon
 } from 'lucide-react';
 
@@ -176,7 +174,7 @@ export default function ProductPage() {
     return localStorage.getItem('triage_user_name') || 'Jhanvi Patel';
   });
   const [loginEmailInput, setLoginEmailInput] = useState<string>('');
-  const [recentAccounts, setRecentAccounts] = useState<string[]>([]);
+  const [_recentAccounts, setRecentAccounts] = useState<string[]>([]);
 
   // Fetch real recent accounts from gateway
   useEffect(() => {
@@ -187,7 +185,7 @@ export default function ProductPage() {
         const emails = Array.from(new Set(list.map((c: any) => c.customer_email).filter(Boolean))) as string[];
         setRecentAccounts(emails);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleSignIn = (e: React.FormEvent) => {
@@ -270,7 +268,7 @@ export default function ProductPage() {
       }
 
       setProcessingStatus('Triage Autonomous Diagnosis Complete. Redirecting to recovery view...');
-      
+
       setTimeout(() => {
         setIsProcessing(false);
         setSelectedPlan(null);
@@ -378,12 +376,12 @@ export default function ProductPage() {
                 Continue to Cloud Plans &rarr;
               </button>
 
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.4, background: 'var(--surface-subtle)', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>
+              {/* <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.4, background: 'var(--surface-subtle)', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>
                 <strong style={{ color: 'var(--accent-color)' }}>⚡ Real Outbound Email:</strong> Live SMTP emails with 1-click recovery links are dispatched directly to real personal/work inboxes (e.g. Gmail / Outlook). Demo accounts (<code>@example.com</code>) run in simulation mode.
-              </div>
+              </div> */}
             </form>
 
-            {recentAccounts.length > 0 && (
+            {/* {recentAccounts.length > 0 && (
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', textAlign: 'left' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
                   Quick Sign In (Active Accounts):
@@ -409,7 +407,7 @@ export default function ProductPage() {
                   ))}
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         </div>
       ) : (
@@ -428,8 +426,8 @@ export default function ProductPage() {
           {/* Pricing Cards */}
           <div className="plans-grid">
             {plans.map((plan) => (
-              <div 
-                key={plan.id} 
+              <div
+                key={plan.id}
                 className={`plan-card ${plan.featured ? 'featured' : ''}`}
               >
                 {plan.featured && (
@@ -437,7 +435,7 @@ export default function ProductPage() {
                 )}
                 <h2 className="plan-title">{plan.name}</h2>
                 <p className="plan-desc">{plan.desc}</p>
-                
+
                 <div className="plan-price-block">
                   <span className="price-currency">₹</span>
                   <span className="price-amount">{plan.displayPrice}</span>
@@ -453,7 +451,7 @@ export default function ProductPage() {
                   ))}
                 </ul>
 
-                <button 
+                <button
                   className="btn-primary"
                   onClick={() => setSelectedPlan(plan)}
                 >
@@ -498,7 +496,7 @@ export default function ProductPage() {
                 <p className="scenarios-label">
                   Select a realistic decline scenario to test Triage autonomous recovery:
                 </p>
-                
+
                 {failureScenarios.map((scenario) => {
                   const Icon = scenario.icon;
                   return (

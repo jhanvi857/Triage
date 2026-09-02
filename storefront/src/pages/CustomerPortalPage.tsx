@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   ShieldCheck,
-  User,
   Mail,
   AlertTriangle,
   CheckCircle2,
@@ -11,9 +10,7 @@ import {
   RefreshCw,
   Clock,
   Calendar,
-  UserCheck,
-  LogOut,
-  Sparkles
+  UserCheck
 } from 'lucide-react';
 import {
   getScheduledDateString,
@@ -496,9 +493,10 @@ export const CustomerPortalPage: React.FC = () => {
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
                             type="button"
+                            disabled={isSendingEmail}
                             onClick={() => handleSendReminderEmail(caseItem.id)}
                             title="Dispatch Payment Reminder Email"
-                            style={{ padding: '0.5rem', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--surface-color)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                            style={{ padding: '0.5rem', borderRadius: 8, border: '1px solid var(--border-strong)', background: 'var(--surface-color)', color: 'var(--text-secondary)', cursor: isSendingEmail ? 'not-allowed' : 'pointer', opacity: isSendingEmail ? 0.6 : 1 }}
                           >
                             <Mail size={16} />
                           </button>
