@@ -11,11 +11,9 @@ import { BatchEvaluationModal } from "../components/BatchEvaluationModal";
 import { IngestFailureModal } from "../components/IngestFailureModal";
 import { RecoveryPipelineView } from "../components/RecoveryPipelineView";
 import { PaymentsRailView } from "../components/PaymentsRailView";
-import { CustomerMatrixView } from "../components/CustomerMatrixView";
 import { AnalyticsUpliftView } from "../components/AnalyticsUpliftView";
 import { PortfolioAllocatorView } from "../components/PortfolioAllocatorView";
 import { ExceptionsQueueView } from "../components/ExceptionsQueueView";
-import { PortfolioQueueView } from "../components/PortfolioQueueView";
 import { SchedulerView } from "../components/SchedulerView";
 import { CoordinationView } from "../components/CoordinationView";
 import {
@@ -270,16 +268,16 @@ export default function RevenueControlPage() {
             />
           ) : (
             <>
-              {/* 1. OVERVIEW / DASHBOARD TAB (LIVE OPERATIONS ONLY) */}
+              {/* 1. OVERVIEW / DASHBOARD TAB (LIVE OPERATIONS SOURCE OF TRUTH) */}
               {activeTab === "OVERVIEW" && (
                 <div className="space-y-4">
-                  {/* Top 4 Operational KPI Cards computed strictly from LIVE transactions */}
+                  {/* Top 4 Operational KPI Cards computed strictly from LIVE storefront transactions */}
                   <KpiMetrics liveCases={liveCases} />
 
-                  {/* 2-Column Operational Telemetry Split: Root Causes & Webhook Telemetry */}
+                  {/* 2-Column Operational Telemetry Split: Root Causes & Live Storefront Telemetry */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                     <div className="lg:col-span-6">
-                      <RevenueAtRiskBreakdown liveCases={liveCases} isSynthetic={false} />
+                      <RevenueAtRiskBreakdown liveCases={liveCases} />
                     </div>
                     <div className="lg:col-span-6">
                       <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-4 font-sans space-y-3 flex flex-col justify-between h-full">
@@ -294,8 +292,8 @@ export default function RevenueControlPage() {
                             </span>
                           </div>
                           <p className="text-[12px] text-[#6F7777] mt-1.5 leading-relaxed">
-                            This live console listens exclusively for real checkouts from the <strong>Storefront (`localhost:5173`)</strong>. 
-                            Events arrive with cryptographic HMAC verification and are tagged as <code className="text-[#2F855A] font-bold">LIVE · VERIFIED</code> (or <code className="text-[#DD6B20] font-bold">LIVE · SIMULATED</code>).
+                            This live console listens exclusively for real customer checkouts from the <strong>Storefront (`localhost:5173`)</strong>. 
+                            Events trigger genuine webhook dispatches and are tagged as <code className="text-[#2F855A] font-bold">LIVE · SANDBOX</code> (Razorpay test-mode capture — real browser interaction, test-mode payment capture).
                           </p>
                         </div>
 
@@ -309,15 +307,15 @@ export default function RevenueControlPage() {
                             <span className="font-bold text-[#2E7D5B]">{liveCases.filter(c => c.status === "RECOVERED").length}</span>
                           </div>
                           <div className="flex justify-between text-[#6F7777]">
-                            <span>Synthetic Model Benchmark:</span>
-                            <span className="text-[#087F83] font-semibold">{syntheticCases.length} Cases (in Evaluation tab)</span>
+                            <span>Active in Triage:</span>
+                            <span className="text-[#087F83] font-semibold">{liveCases.filter(c => c.status !== "RECOVERED" && c.status !== "LOST").length}</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Main Recovery Queue Table showing ONLY LIVE cases */}
+                  {/* Main Recovery Queue Table showing ONLY LIVE cases from the customer storefront */}
                   <RecoveryQueueTable
                     cases={liveCases}
                     onSelectCase={(c) => setSelectedCaseDetail(c)}
@@ -329,29 +327,7 @@ export default function RevenueControlPage() {
                 </div>
               )}
 
-              {/* 2. PRIORITIZED PORTFOLIO QUEUE TAB */}
-              {activeTab === "PORTFOLIO" && (
-                <PortfolioQueueView
-                  onSelectCase={(c) => setSelectedCaseDetail(cases.find(x => x.id === c.id) || null)}
-                  onRefresh={loadData}
-                />
-              )}
-
-              {/* 3. RECOVERY QUEUE TAB */}
-              {activeTab === "RECOVERY" && (
-                <div className="space-y-4">
-                  <RecoveryQueueTable
-                    cases={liveCases}
-                    onSelectCase={(c) => setSelectedCaseDetail(c)}
-                    onAdvanceCase={handleAdvanceCase}
-                    processingId={processingId}
-                    title="Live Operations Queue"
-                    subtitle={liveCases.length === 0 ? "Awaiting live checkout failures" : `${liveCases.length} live operational cases`}
-                  />
-                </div>
-              )}
-
-              {/* 4. CASES / PIPELINE TAB */}
+              {/* 2. RECOVERY PIPELINE (KANBAN) */}
               {activeTab === "CASES" && (
                 <RecoveryPipelineView
                   cases={filteredCases}
@@ -363,22 +339,7 @@ export default function RevenueControlPage() {
                 />
               )}
 
-              {/* 5. DETERMINISTIC SCHEDULER TAB */}
-              {activeTab === "SCHEDULER" && (
-                <SchedulerView onRefresh={loadData} />
-              )}
-
-              {/* 6. CROSS-WORKFLOW COORDINATION TAB */}
-              {activeTab === "COORDINATION" && (
-                <CoordinationView />
-              )}
-
-              {/* 7. PORTFOLIO ALLOCATOR TAB (KNAPSACK OPTIMIZATION) */}
-              {activeTab === "ALLOCATOR" && (
-                <PortfolioAllocatorView />
-              )}
-
-              {/* 5. EVALUATION TAB (EXCLUSIVELY FOR SYNTHETIC MODEL EVALUATION) */}
+              {/* 3. BATCH EVALUATION & COUNTERFACTUAL UPLIFT (THE BAR) */}
               {activeTab === "EVALUATION" && (
                 <AnalyticsUpliftView
                   stats={stats}
@@ -387,7 +348,17 @@ export default function RevenueControlPage() {
                 />
               )}
 
-              {/* 5. AUDIT LEDGER TAB */}
+              {/* 4. COMPLIANT STOPPING RULES & HUMAN DESK (THE BAR) */}
+              {activeTab === "EXCEPTIONS" && (
+                <ExceptionsQueueView
+                  cases={filteredCases}
+                  onSelectCase={(c) => setSelectedCaseDetail(c)}
+                  onResolve={handleResolveCase}
+                  processingId={processingId}
+                />
+              )}
+
+              {/* 5. CRYPTOGRAPHIC AUDIT LEDGER (THE BAR) */}
               {activeTab === "AUDIT" && (
                 <PaymentsRailView
                   cases={filteredCases}
@@ -395,43 +366,19 @@ export default function RevenueControlPage() {
                 />
               )}
 
-              {/* 6. PTP MONITOR TAB */}
-              {activeTab === "PTP" && (
-                <div className="space-y-4">
-                  <div className="bg-[#FFFFFF] border border-[#E2E5E5] rounded-lg p-5">
-                    <h2 className="text-[16px] font-semibold uppercase text-[#202525]">
-                      Promise-to-Pay (PTP) Operations
-                    </h2>
-                    <p className="text-[14px] font-normal text-[#6F7777] mt-1">
-                      Select any active case from the queue below to inspect its deterministic date extraction or test Hindi/English conversational promises.
-                    </p>
-                  </div>
-                  <RecoveryQueueTable
-                    cases={liveCases}
-                    onSelectCase={(c) => setSelectedCaseDetail(c)}
-                    onAdvanceCase={handleAdvanceCase}
-                    processingId={processingId}
-                    title="Live Cases PTP Queue"
-                  />
-                </div>
+              {/* 6. PORTFOLIO ALLOCATOR (KNAPSACK SOLVER) */}
+              {activeTab === "ALLOCATOR" && (
+                <PortfolioAllocatorView />
               )}
 
-              {/* 7. REPORTS TAB */}
-              {activeTab === "REPORTS" && (
-                <CustomerMatrixView
-                  cases={filteredCases}
-                  onSelectCase={(c) => setSelectedCaseDetail(c)}
-                />
+              {/* 7. CROSS-WORKFLOW COORDINATION */}
+              {activeTab === "COORDINATION" && (
+                <CoordinationView />
               )}
 
-              {/* 8. SETTINGS TAB */}
-              {activeTab === "SETTINGS" && (
-                <ExceptionsQueueView
-                  cases={filteredCases}
-                  onSelectCase={(c) => setSelectedCaseDetail(c)}
-                  onResolve={handleResolveCase}
-                  processingId={processingId}
-                />
+              {/* 8. MANDATE RETRY SEQUENCER & SIM-CLOCK */}
+              {activeTab === "SCHEDULER" && (
+                <SchedulerView onRefresh={loadData} />
               )}
             </>
           )}

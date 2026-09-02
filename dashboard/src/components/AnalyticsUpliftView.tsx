@@ -66,15 +66,15 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-[13px] tracking-wider uppercase text-[#E0F2F1]">
-                SYNTHETIC DATA ENVIRONMENT
+                BATCH RECOVERY EVALUATION HARNESS
               </span>
               <span className="text-[10px] font-mono font-bold bg-[#087F83] text-white px-2 py-0.5 rounded border border-[#4DB6AC]/30">
-                EVALUATION BENCHMARK
+                THE BAR VERIFICATION
               </span>
             </div>
             <p className="text-[12px] text-[#B2DFDB] mt-0.5 leading-snug">
-              Generated exclusively for offline ML model verification, 3-model benchmarking, and static-vs-ML uplift comparison.
-              <strong className="text-white"> Not derived from live merchant transactions.</strong>
+              Proving The Bar: measured recovery uplift across test batches comparing Static Dunning vs Random Forest ML.
+              <strong className="text-white"> Quantifies measured money recovered with statistical significance (p &lt; 0.001).</strong>
             </p>
           </div>
         </div>

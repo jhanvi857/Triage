@@ -15,7 +15,6 @@ interface RecoveryPipelineViewProps {
 }
 
 type StageFilter = "ALL" | "NEW" | "DIAGNOSED" | "INTERVENING" | "PTP_COMMITTED" | "RECOVERED";
-type SourceFilter = "LIVE" | "SYNTHETIC" | "ALL";
 
 export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
   cases,
@@ -26,30 +25,23 @@ export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
   processingId,
 }) => {
   const [stageFilter, setStageFilter] = useState<StageFilter>("ALL");
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("LIVE");
-
-  // Filter by source first
-  const sourceCases = useMemo(() => {
-    if (sourceFilter === "ALL") return cases;
-    if (sourceFilter === "LIVE") return cases.filter((c) => c.source === "LIVE");
-    return cases.filter((c) => c.source !== "LIVE");
-  }, [cases, sourceFilter]);
 
   const counts = {
-    ALL: sourceCases.length,
-    NEW: sourceCases.filter((c) => c.status === "NEW").length,
-    DIAGNOSED: sourceCases.filter((c) => c.status === "DIAGNOSED").length,
-    INTERVENING: sourceCases.filter((c) => c.status === "INTERVENING").length,
-    PTP_COMMITTED: sourceCases.filter((c) => c.status === "PTP_COMMITTED" || c.status === "RETRY_SCHEDULED").length,
-    RECOVERED: sourceCases.filter((c) => c.status === "RECOVERED").length,
+    ALL: cases.length,
+    NEW: cases.filter((c) => c.status === "NEW").length,
+    DIAGNOSED: cases.filter((c) => c.status === "DIAGNOSED").length,
+    INTERVENING: cases.filter((c) => c.status === "INTERVENING").length,
+    PTP_COMMITTED: cases.filter((c) => c.status === "PTP_COMMITTED" || c.status === "RETRY_SCHEDULED").length,
+    RECOVERED: cases.filter((c) => c.status === "RECOVERED").length,
   };
 
-  const filteredCases =
-    stageFilter === "ALL"
-      ? sourceCases
-      : stageFilter === "PTP_COMMITTED"
-      ? sourceCases.filter((c) => c.status === "PTP_COMMITTED" || c.status === "RETRY_SCHEDULED")
-      : sourceCases.filter((c) => c.status === stageFilter);
+  const filteredCases = useMemo(() => {
+    if (stageFilter === "ALL") return cases;
+    if (stageFilter === "PTP_COMMITTED") {
+      return cases.filter((c) => c.status === "PTP_COMMITTED" || c.status === "RETRY_SCHEDULED");
+    }
+    return cases.filter((c) => c.status === stageFilter);
+  }, [cases, stageFilter]);
 
   return (
     <div className="space-y-4 font-sans">
@@ -70,30 +62,9 @@ export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Source Toggle */}
-          <div className="flex items-center bg-[#F5F6F6] p-1 rounded-lg border border-[#E2E5E5]">
-            <button
-              onClick={() => setSourceFilter("LIVE")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold uppercase transition-all ${
-                sourceFilter === "LIVE"
-                  ? "bg-[#FFFFFF] text-[#2F855A] shadow-xs border border-[#C6F6D5]"
-                  : "text-[#6F7777] hover:text-[#202525]"
-              }`}
-            >
-              <Radio className={`w-3 h-3 ${sourceFilter === "LIVE" ? "animate-pulse" : ""}`} />
-              <span>Live Storefront ({cases.filter(c => c.source === "LIVE").length})</span>
-            </button>
-            <button
-              onClick={() => setSourceFilter("SYNTHETIC")}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold uppercase transition-all ${
-                sourceFilter === "SYNTHETIC"
-                  ? "bg-[#FFFFFF] text-[#0E4B4C] shadow-xs border border-[#80CBC4]"
-                  : "text-[#6F7777] hover:text-[#202525]"
-              }`}
-            >
-              <Layers className="w-3 h-3 text-[#0E4B4C]" />
-              <span>Synthetic Batch ({cases.filter(c => c.source !== "LIVE").length})</span>
-            </button>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EBF8F2] text-[#2F855A] border border-[#C6F6D5] text-[11px] font-mono font-bold uppercase">
+            <Radio className="w-3 h-3 animate-pulse" />
+            <span>Live Portfolio ({cases.length})</span>
           </div>
 
           <button
@@ -226,12 +197,8 @@ export const RecoveryPipelineView: React.FC<RecoveryPipelineViewProps> = ({
         onSelectCase={onSelectCase}
         onAdvanceCase={onAdvanceCase}
         processingId={processingId}
-        title={sourceFilter === "LIVE" ? "Live Operations Queue" : "Synthetic Batch Queue"}
-        subtitle={
-          sourceFilter === "LIVE"
-            ? `${filteredCases.length} real-time storefront transaction${filteredCases.length === 1 ? "" : "s"}`
-            : `${filteredCases.length} synthetic benchmark cases`
-        }
+        title="Live Pipeline Queue"
+        subtitle={`${filteredCases.length} active recovery workflow${filteredCases.length === 1 ? "" : "s"}`}
       />
     </div>
   );

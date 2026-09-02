@@ -3,28 +3,23 @@
 import React from "react";
 import {
   LayoutDashboard,
-  RotateCcw,
   Layers,
   BarChart3,
   ShieldCheck,
+  ShieldAlert,
   Calendar,
-  FileText,
   Settings as SettingsIcon,
 } from "lucide-react";
 
 export type NavTab =
   | "OVERVIEW"
-  | "PORTFOLIO"
-  | "RECOVERY"
   | "CASES"
-  | "SCHEDULER"
-  | "COORDINATION"
-  | "ALLOCATOR"
   | "EVALUATION"
+  | "EXCEPTIONS"
   | "AUDIT"
-  | "PTP"
-  | "REPORTS"
-  | "SETTINGS";
+  | "ALLOCATOR"
+  | "COORDINATION"
+  | "SCHEDULER";
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -48,29 +43,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalCasesCount,
 }) => {
   const NAV_ITEMS: NavItemConfig[] = [
-    { id: "OVERVIEW", label: "Live Operations", icon: LayoutDashboard },
     {
-      id: "PORTFOLIO",
-      label: "Portfolio Queue",
+      id: "OVERVIEW",
+      label: "Live Operations",
+      icon: LayoutDashboard,
+      badge: totalCasesCount > 0 ? totalCasesCount : "LIVE",
+      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+    },
+    {
+      id: "CASES",
+      label: "Recovery Pipeline",
       icon: Layers,
-      badge: "RANKED",
-      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
-    },
-    { id: "RECOVERY", label: "Recovery Queue", icon: RotateCcw },
-    { id: "CASES", label: "Pipeline", icon: Layers },
-    {
-      id: "SCHEDULER",
-      label: "Scheduler",
-      icon: Calendar,
-      badge: "SIM-TIME",
-      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+      badge: "5-STAGE",
+      badgeColor: "bg-[#F5F6F6] text-[#6F7777] border-[#E2E5E5] font-mono text-[9px]",
     },
     {
-      id: "COORDINATION",
-      label: "Coordination",
+      id: "EVALUATION",
+      label: "Batch & Uplift",
+      icon: BarChart3,
+      badge: "THE BAR",
+      badgeColor: "bg-[#EBF8F2] text-[#2F855A] border-[#C6F6D5] font-mono text-[9px]",
+    },
+    {
+      id: "EXCEPTIONS",
+      label: "Stopping Rules",
+      icon: ShieldAlert,
+      badge: exceptionCount > 0 ? exceptionCount : undefined,
+      badgeColor: "bg-[#B7791F]/15 text-[#B7791F] border-[#B7791F]/30",
+    },
+    {
+      id: "AUDIT",
+      label: "Audit Ledger",
       icon: ShieldCheck,
-      badge: "CROSS-WF",
-      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
+      badge: "SHA-256",
+      badgeColor: "bg-[#F5F6F6] text-[#6F7777] border-[#E2E5E5] font-mono text-[9px]",
     },
     {
       id: "ALLOCATOR",
@@ -80,21 +86,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
     },
     {
-      id: "EVALUATION",
-      label: "Evaluation",
-      icon: BarChart3,
-      badge: "3-MODEL",
+      id: "COORDINATION",
+      label: "Cross-Workflow",
+      icon: ShieldCheck,
+      badge: "MULTI-WF",
       badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
     },
-    { id: "AUDIT", label: "Audit Ledger", icon: ShieldCheck },
-    { id: "PTP", label: "PTP Monitor", icon: Calendar },
-    { id: "REPORTS", label: "Reports", icon: FileText },
     {
-      id: "SETTINGS",
-      label: "Exceptions",
-      icon: SettingsIcon,
-      badge: exceptionCount > 0 ? exceptionCount : undefined,
-      badgeColor: "bg-[#B7791F]/15 text-[#B7791F] border-[#B7791F]/30",
+      id: "SCHEDULER",
+      label: "Mandate Sequencer",
+      icon: Calendar,
+      badge: "SIM-TIME",
+      badgeColor: "bg-[#E6F4F1] text-[#087F83] border-[#B2DFDB] font-mono text-[9px]",
     },
   ];
 
