@@ -69,7 +69,7 @@ func NewServer(cfg Config) (*Server, error) {
 	diagEngine := diagnosis.NewEngine()
 	interSelector := intervention.NewSelector()
 	recManager := recovery.NewManager()
-	triageSrv := NewTriageServer(diagEngine, interSelector, recManager)
+	triageSrv := NewTriageServer(diagEngine, interSelector, recManager, bMgr)
 
 	s := &Server{
 		budgetMgr:      bMgr,

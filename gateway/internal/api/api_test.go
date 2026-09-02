@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ledger/gateway/internal/budget"
 	"github.com/ledger/gateway/internal/diagnosis"
 	"github.com/ledger/gateway/internal/intervention"
 	"github.com/ledger/gateway/internal/recovery"
@@ -174,7 +175,7 @@ func TestAPI_IdempotentReplayNoDoubleCharge(t *testing.T) {
 }
 
 func TestAPI_StrictPTPAccounting_ZeroRecoveredUntilSettlement(t *testing.T) {
-	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager())
+	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager(), budget.NewManager(1000000))
 	mux := http.NewServeMux()
 	ts.RegisterRoutes(mux)
 
@@ -243,7 +244,7 @@ func TestAPI_StrictPTPAccounting_ZeroRecoveredUntilSettlement(t *testing.T) {
 }
 
 func TestAPI_EmailPolicy_SuppressesFraudAndDispatchesReceipt(t *testing.T) {
-	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager())
+	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager(), budget.NewManager(1000000))
 	mux := http.NewServeMux()
 	ts.RegisterRoutes(mux)
 
@@ -283,7 +284,7 @@ func TestAPI_EmailPolicy_SuppressesFraudAndDispatchesReceipt(t *testing.T) {
 }
 
 func TestAPI_StrictScheduledRetryLifecycle_ExplicitPendingAndAttemptBounds(t *testing.T) {
-	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager())
+	ts := NewTriageServer(diagnosis.NewEngine(), intervention.NewSelector(), recovery.NewManager(), budget.NewManager(1000000))
 	mux := http.NewServeMux()
 	ts.RegisterRoutes(mux)
 

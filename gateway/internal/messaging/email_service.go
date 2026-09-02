@@ -199,6 +199,15 @@ func (es *EmailService) SendStatementEmail(to, customerName, caseID, planName st
 // SendActionRequiredEmail sends a customer-action-required notice with 1-click recovery link
 func (es *EmailService) SendActionRequiredEmail(to, customerName, caseID, planName string, amountINR float64, reason, recoveryURL string) EmailDispatchResult {
 	subject := fmt.Sprintf("Action Required: Complete Settlement for %s (Invoice #%s)", planName, caseID)
+	hasConcession := strings.Contains(strings.ToLower(reason), "concession") || strings.Contains(strings.ToLower(reason), "5%") || strings.Contains(strings.ToLower(reason), "discount")
+	if hasConcession {
+		subject = fmt.Sprintf("5%% Instant Concession: Pay ₹%.2f for %s (Invoice #%s)", amountINR, planName, caseID)
+	}
+
+	concessionBadge := ""
+	if hasConcession {
+		concessionBadge = ` <span style="font-size: 11px; background: #C6F6D5; color: #22543D; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-left: 6px;">5% Concession Applied</span>`
+	}
 
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -238,7 +247,7 @@ func (es *EmailService) SendActionRequiredEmail(to, customerName, caseID, planNa
       <table class="invoice-table">
         <tr><th>Invoice Reference</th><td><code>%s</code></td></tr>
         <tr><th>Subscription Item</th><td><strong>%s</strong></td></tr>
-        <tr><th>Total Amount Due</th><td><span class="amount-due">₹%.2f</span></td></tr>
+        <tr><th>Total Amount Due</th><td><span class="amount-due">₹%.2f</span>%s</td></tr>
         <tr><th>Payment Status</th><td><strong style="color: #E53E3E;">Payment Required</strong></td></tr>
       </table>
 
@@ -255,7 +264,7 @@ func (es *EmailService) SendActionRequiredEmail(to, customerName, caseID, planNa
     </div>
   </div>
 </body>
-</html>`, customerName, planName, reason, caseID, planName, amountINR, recoveryURL, caseID)
+</html>`, customerName, planName, reason, caseID, planName, amountINR, concessionBadge, recoveryURL, caseID)
 
 	return es.dispatchEmail(to, subject, htmlBody)
 }
@@ -307,12 +316,8 @@ func (es *EmailService) SendPTPConfirmationEmail(to, customerName, caseID, planN
         <tr><th>Current Status</th><td><strong>PTP_COMMITTED (Awaiting Settlement)</strong></td></tr>
       </table>
 
-      <div style="text-align: center;">
-        <a href="%s" class="btn">View or Settle Early &rarr;</a>
-      </div>
-
       <p style="font-size: 13px; color: #718096; line-height: 1.5;">
-        A reminder will be sent before the scheduled date. If you wish to settle earlier or switch payment method, click above at any time.
+        We have registered your payment commitment. A notification will be dispatched prior to the scheduled date. No further action is required at this time.
       </p>
     </div>
     <div class="footer">
@@ -320,7 +325,7 @@ func (es *EmailService) SendPTPConfirmationEmail(to, customerName, caseID, planN
     </div>
   </div>
 </body>
-</html>`, customerName, planName, promisedDate, caseID, planName, amountINR, promisedDate, recoveryURL, caseID)
+</html>`, customerName, planName, promisedDate, caseID, planName, amountINR, promisedDate, caseID)
 
 	return es.dispatchEmail(to, subject, htmlBody)
 }
@@ -369,7 +374,7 @@ func (es *EmailService) SendRetryScheduledEmail(to, customerName, caseID, planNa
       </table>
 
       <p style="font-size: 13px; color: #718096; line-height: 1.5;">
-        No action is required from your side. If you wish to settle immediately or update payment details, you can visit <a href="%s">your billing portal</a>.
+        No action is required from your side. The scheduled retry will execute autonomously on the designated date.
       </p>
     </div>
     <div class="footer">
@@ -377,7 +382,7 @@ func (es *EmailService) SendRetryScheduledEmail(to, customerName, caseID, planNa
     </div>
   </div>
 </body>
-</html>`, customerName, planName, scheduledDate, caseID, amountINR, scheduledDate, recoveryURL, caseID)
+</html>`, customerName, planName, scheduledDate, caseID, amountINR, scheduledDate, caseID)
 
 	return es.dispatchEmail(to, subject, htmlBody)
 }

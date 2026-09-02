@@ -24,6 +24,7 @@ const (
 	StatusRetryFailed    = "RETRY_FAILED"
 	StatusPTPCommitted   = "PTP_COMMITTED"
 	StatusPTPMissed      = "PTP_MISSED"
+	StatusHumanResolved  = "HUMAN_RESOLVED"
 	StatusRecovered      = "RECOVERED"
 	StatusLost           = "LOST"
 	StatusEscalated      = "ESCALATED"
@@ -75,6 +76,8 @@ type Case struct {
 	NextRetryAt               *time.Time                         `json:"next_retry_at,omitempty"`
 	RecoveredAmountPaise      int64                              `json:"recovered_amount_paise"`
 	AmountRefundedPaise       int64                              `json:"amount_refunded_paise"`
+	AvailableBalancePaise     int64                              `json:"available_balance_paise,omitempty"`
+	AvailableBalanceINR       float64                            `json:"available_balance_inr,omitempty"`
 	IncentiveDiscountPaise    int64                              `json:"incentive_discount_paise"`
 	RazorpayPaymentID         string                             `json:"razorpay_payment_id,omitempty"`
 	IdempotencyKey            string                             `json:"idempotency_key"`
@@ -275,6 +278,8 @@ func (m *Manager) seedDefaultCases() {
 			OriginalRail:   "CARD",
 			ErrorCode:      "INSUFFICIENT_FUNDS",
 			ErrorDesc:      "Soft decline after repeated automatic attempts (Attempt 3/3)",
+			AvailableBalancePaise: 120000, // ₹1,200.00 (gap NOT closable: 1200 < 3325)
+			AvailableBalanceINR:   1200.00,
 			Status:         StatusNew,
 			AttemptsMade:   3,
 			MaxAttempts:    3,
@@ -346,10 +351,80 @@ func (m *Manager) seedDefaultCases() {
 			CreatedAt:      now.Add(-48 * time.Hour),
 			UpdatedAt:      now.Add(-48 * time.Hour),
 		},
+		// High EV-Density Cases to Visibly Demonstrate Knapsack Discount Budget Allocation
+		{
+			ID:                  "CASE-4108",
+			CustomerID:          "cust_ds_07",
+			CustomerName:        "Kavita Rao (Design Studio)",
+			CustomerEmail:       "kavita.design@gmail.com",
+			PlanName:            "Pro Figma Cloud Sync (Annual)",
+			SourceType:          SourceFailedPayment,
+			AmountPaise:         240000, // ₹2,400.00
+			AmountINR:           2400.00,
+			Currency:            "INR",
+			OriginalRail:        "CARD",
+			ErrorCode:           "INSUFFICIENT_FUNDS",
+			ErrorDesc:           "Soft decline: monthly account buffer reached",
+			AvailableBalancePaise: 228000, // ₹2,280.00 (closes gap: ₹2,400 fails -> ₹2,280 succeeds)
+			AvailableBalanceINR:   2280.00,
+			PaydayProximityDays: 14,
+			HistoricalSuccessRate: 0.85,
+			Status:              StatusNew,
+			AttemptsMade:        0,
+			MaxAttempts:         3,
+			IdempotencyKey:      "idem_case_4108",
+			CreatedAt:           now.Add(-40 * time.Minute),
+			UpdatedAt:           now.Add(-40 * time.Minute),
+		},
+		{
+			ID:                     "CASE-3842",
+			CustomerID:             "cust_cf_08",
+			CustomerName:           "CloudFlow Automations",
+			CustomerEmail:          "admin@cloudflow.tech",
+			PlanName:               "Webhook Relay Server Quota",
+			SourceType:             SourceMandateFailure,
+			AmountPaise:            320000, // ₹3,200.00
+			AmountINR:              3200.00,
+			Currency:               "INR",
+			OriginalRail:           "NACH_MANDATE",
+			ErrorCode:              "MANDATE_REVOKED",
+			ErrorDesc:              "Recurring billing mandate authorization rejected by issuer",
+			CanUpdatePaymentMethod: true,
+			PaydayProximityDays:    8,
+			HistoricalSuccessRate:  0.79,
+			Status:                 StatusNew,
+			AttemptsMade:           0,
+			MaxAttempts:            3,
+			IdempotencyKey:         "idem_case_3842",
+			CreatedAt:              now.Add(-65 * time.Minute),
+			UpdatedAt:              now.Add(-65 * time.Minute),
+		},
+		{
+			ID:                  "CASE-2915",
+			CustomerID:          "cust_ed_09",
+			CustomerName:        "Priya Patel (EdTech)",
+			CustomerEmail:       "priya@edulearn.org",
+			PlanName:            "Interactive Classroom Compute",
+			SourceType:          SourceFailedPayment,
+			AmountPaise:         150000, // ₹1,500.00
+			AmountINR:           1500.00,
+			Currency:            "INR",
+			OriginalRail:        "UPI",
+			ErrorCode:           "INSUFFICIENT_FUNDS",
+			ErrorDesc:           "UPI mandate soft decline: account balance below threshold",
+			PaydayProximityDays: 15,
+			HistoricalSuccessRate: 0.90,
+			Status:              StatusNew,
+			AttemptsMade:        0,
+			MaxAttempts:         3,
+			IdempotencyKey:      "idem_case_2915",
+			CreatedAt:           now.Add(-18 * time.Minute),
+			UpdatedAt:           now.Add(-18 * time.Minute),
+		},
 	}
 
 	for _, c := range cases {
-		c.Source = "SYNTHETIC"
+		c.Source = "LIVE"
 		m.ensureAllowedActions(c)
 		m.cases[c.ID] = c
 	}
@@ -370,6 +445,9 @@ func (m *Manager) ensureAllowedActions(c *Case) {
 		c.AlternateSavedCardLabel,
 		c.AlternateCardSuccessCount,
 		c.HasUPIAvailable,
+		500000,
+		5,
+		c.AvailableBalancePaise,
 	)
 	if c.Diagnosis != nil && c.Diagnosis.RootCause != "" {
 		recCtx.RootCause = c.Diagnosis.RootCause

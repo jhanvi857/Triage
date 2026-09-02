@@ -98,6 +98,8 @@ func (s *Selector) SelectIntervention(
 	altCardLabel := ""
 	altCardSuccess := 0
 	hasUPI := false
+	var humanDeskSlotsRemaining int = 5 // default desk capacity
+	var availableBalancePaise int64 = 0
 
 	if len(extraContext) > 0 && extraContext[0] != nil {
 		ctx := extraContext[0]
@@ -128,6 +130,12 @@ func (s *Selector) SelectIntervention(
 		if u, ok := ctx["has_upi_available"].(bool); ok {
 			hasUPI = u
 		}
+		if ds, ok := ctx["human_desk_slots_remaining"].(int); ok {
+			humanDeskSlotsRemaining = ds
+		}
+		if ab, ok := ctx["available_balance_paise"].(int64); ok {
+			availableBalancePaise = ab
+		}
 	}
 
 	// 1. CONTEXT-AWARE ELIGIBILITY ENGINE EVALUATION (Read-only context check)
@@ -145,6 +153,9 @@ func (s *Selector) SelectIntervention(
 		altCardLabel,
 		altCardSuccess,
 		hasUPI,
+		availableBudgetPaise,
+		int64(humanDeskSlotsRemaining),
+		availableBalancePaise,
 	)
 
 	candidateEvaluations := s.EligibilityEngine.EvaluateEligibility(recCtx)
@@ -260,6 +271,29 @@ func (s *Selector) SelectIntervention(
 		Passed:   concessionCapPassed,
 		Reason:   fmt.Sprintf("Concession ₹%.2f capped at ≤5%% AND ≤₹%.2f", float64(incentiveAmountPaise)/100.0, float64(s.MaxIncentiveCapPaise)/100.0),
 	})
+
+	// Rule 6: Budget Sufficiency — hard veto if ML recommends INCENTIVE_DISCOUNT but budget can't cover it
+	budgetSufficiencyPassed := true
+	if topCandidate.Action == ActionIncentiveDiscount && incentiveAmountPaise > 0 {
+		budgetSufficiencyPassed = availableBudgetPaise >= incentiveAmountPaise
+	}
+	policyRules = append(policyRules, PolicyRuleEvaluation{
+		RuleName: "BUDGET_SUFFICIENCY",
+		Passed:   budgetSufficiencyPassed,
+		Reason:   fmt.Sprintf("Discount spend ₹%.2f vs recovery budget ₹%.2f remaining", float64(incentiveAmountPaise)/100.0, float64(availableBudgetPaise)/100.0),
+	})
+	if !budgetSufficiencyPassed {
+		isVetoed = true
+		// Downgrade to best available zero-cost action instead of hard escalation
+		vetoAction = eligibleCandidates[0]
+		for _, ec := range eligibleCandidates {
+			if ec != ActionIncentiveDiscount && ec != ActionEscalateHuman && ec != ActionStop {
+				vetoAction = ec
+				break
+			}
+		}
+		vetoReason = fmt.Sprintf("Budget insufficient for discount (₹%.2f required > ₹%.2f available). Downgraded to zero-cost action '%s'.", float64(incentiveAmountPaise)/100.0, float64(availableBudgetPaise)/100.0, vetoAction)
+	}
 
 	// Build structured "Why this action?" signals
 	positiveSignals := make([]string, 0)

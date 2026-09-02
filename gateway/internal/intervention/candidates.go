@@ -45,26 +45,32 @@ var AllowedCandidatesByCause = map[string][]string{
 	diagnosis.CauseBankDowntime: {
 		ActionRetrySameRailCooldown,
 		ActionSwitchToAvailableAlternateRail,
+		ActionPromiseToPay,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseInsufficientFunds: {
+		ActionIncentiveDiscount,
 		ActionSwitchToSavedCard,
+		ActionSwitchToAvailableAlternateRail,
 		ActionRetryNextPaydayWindow,
 		ActionPromiseToPay,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseExpiredCard: {
 		ActionUpdatePaymentMethod,
+		ActionPromiseToPay,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseMandateRevoked: {
 		ActionReauthorizeMandate,
 		ActionCollectOutstandingPayment,
+		ActionPromiseToPay,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseOtpDropoff: {
 		ActionResumeCheckout,
 		ActionSwitchToAvailableAlternateRail,
+		ActionPromiseToPay,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseFraudSuspected: {
@@ -74,6 +80,7 @@ var AllowedCandidatesByCause = map[string][]string{
 	diagnosis.CauseNetworkDecline: {
 		ActionRetrySameRailCooldown,
 		ActionSwitchToAvailableAlternateRail,
+		ActionPromiseToPay,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseUnknown: {

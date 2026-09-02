@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ledger/gateway/internal/diagnosis"
+	"github.com/ledger/gateway/internal/ptp"
 	"github.com/ledger/gateway/internal/recovery"
 )
 
@@ -123,3 +124,72 @@ func TestPortfolioAllocator_BudgetExhaustionAndFallbacks(t *testing.T) {
 		t.Errorf("discount spent %d exceeded limit 18000", plan.DiscountBudgetSpentPaise)
 	}
 }
+
+func TestPortfolioAllocator_PromiseToPayBucket(t *testing.T) {
+	alloc := NewPortfolioAllocator()
+	now := time.Now().UTC()
+
+	cases := []*recovery.Case{
+		{
+			ID:           "CASE-PTP-01",
+			CustomerName: "Committed PTP Customer",
+			AmountPaise:  500000, // ₹5,000
+			Status:       recovery.StatusPTPCommitted,
+			PTPStatus: &ptp.ParseResult{
+				PromiseDetected: true,
+				PromisedDate:    "Tomorrow 5 PM",
+				ConfidenceScore: 0.95,
+			},
+			Diagnosis: &diagnosis.DiagnosticReport{RootCause: "INSUFFICIENT_FUNDS"},
+			CreatedAt: now,
+		},
+		{
+			ID:           "CASE-DISC-01",
+			CustomerName: "Discount Candidate",
+			AmountPaise:  200000, // ₹2,000
+			PaydayProximityDays: 14,
+			Diagnosis:   &diagnosis.DiagnosticReport{RootCause: "INSUFFICIENT_FUNDS"},
+			CreatedAt:   now,
+		},
+		{
+			ID:           "CASE-ENT-01",
+			CustomerName: "Enterprise Client",
+			AmountPaise:  2500000, // ₹25,000 -> Human desk
+			Diagnosis:   &diagnosis.DiagnosticReport{RootCause: "MANDATE_REVOKED"},
+			CreatedAt:   now,
+		},
+	}
+
+	plan := alloc.OptimizePortfolio(cases, 50000, 2)
+
+	if plan.CasesAllocatedPTP != 1 {
+		t.Fatalf("expected 1 PTP allocation, got %d", plan.CasesAllocatedPTP)
+	}
+	if plan.ActivePromisesCount != 1 {
+		t.Fatalf("expected 1 active promise count, got %d", plan.ActivePromisesCount)
+	}
+	if plan.TotalPTPPromisedPaise != 500000 {
+		t.Errorf("expected 500000 paise promised, got %d", plan.TotalPTPPromisedPaise)
+	}
+	if plan.HistoricalKeptRate <= 0.5 {
+		t.Errorf("expected historical kept rate > 0.5, got %.2f", plan.HistoricalKeptRate)
+	}
+
+	var ptpDecision *AllocationDecision
+	for i := range plan.Decisions {
+		if plan.Decisions[i].CaseID == "CASE-PTP-01" {
+			ptpDecision = &plan.Decisions[i]
+		}
+	}
+
+	if ptpDecision == nil {
+		t.Fatalf("missing decision for CASE-PTP-01")
+	}
+	if ptpDecision.ResourceAllocated != "PROMISE_TO_PAY" {
+		t.Errorf("expected ResourceAllocated == PROMISE_TO_PAY, got %s", ptpDecision.ResourceAllocated)
+	}
+	if ptpDecision.AssignedAction != "PROMISE_TO_PAY" {
+		t.Errorf("expected AssignedAction == PROMISE_TO_PAY, got %s", ptpDecision.AssignedAction)
+	}
+}
+
