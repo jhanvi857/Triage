@@ -187,8 +187,6 @@ func (pa *PortfolioAllocator) OptimizePortfolio(
 		gapClosing := true
 		if c.AvailableBalancePaise > 0 {
 			gapClosing = c.AvailableBalancePaise < c.AmountPaise && c.AvailableBalancePaise >= (c.AmountPaise-discountPaise)
-		} else if cause == "INSUFFICIENT_FUNDS" && c.ID == "CASE-3091" {
-			gapClosing = false
 		}
 		wantsDiscount := (cause == "INSUFFICIENT_FUNDS") && gapClosing && c.AmountPaise <= 1000000 && !wantsHuman && !hasCustomerPTP
 

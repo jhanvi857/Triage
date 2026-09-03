@@ -139,8 +139,6 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 		gapClosingEligible := true
 		if ctx.AvailableBalancePaise > 0 {
 			gapClosingEligible = ctx.AvailableBalancePaise < ctx.AmountPaise && ctx.AvailableBalancePaise >= (ctx.AmountPaise-discountCostPaise)
-		} else if ctx.CaseID == "CASE-3091" {
-			gapClosingEligible = false
 		}
 
 		// GATE 2 — Budget (knapsack, portfolio-level): Does merchant concession pool have remaining capacity?

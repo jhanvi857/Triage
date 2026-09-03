@@ -210,11 +210,7 @@ export const OrderStatusPage: React.FC = () => {
     const gapClosingThreshold = invoiceAmount - maxDiscountINR;
     let availableBalance: number | undefined = c.available_balance_inr;
     if (availableBalance === undefined && isFunds) {
-      if (c.id === 'CASE-3091') {
-        availableBalance = 1200; // Solvency gap too wide (1200 < 3325) -> discount NOT offered
-      } else {
-        availableBalance = gapClosingThreshold; // Solvency gap precisely closed -> discount offered
-      }
+      availableBalance = gapClosingThreshold;
     }
 
     const isGapClosing = isFunds &&

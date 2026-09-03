@@ -18,15 +18,15 @@ While Razorpay provides industry-leading payment gateway processing, standard su
 | **2** | **Dual-Gated Concession Solvency Engine** | **Static merchant offers**: [Razorpay Offers API](https://razorpay.com/docs/payments/offers/) supports flat/percentage discounts configured manually at the order level, not computed dynamically against an individual customer's solvency gap. | **2-Gate Knapsack Solver**: Gate 1 deterministic gap-closing check ($\text{bal} \ge \text{amt} - \text{concession}$) + Gate 2 marginal ERV density portfolio budget allocator. |
 | **3** | **Payday-Aware Adaptive Sequencer** | **Fixed daily schedule**: [Razorpay Subscriptions Payment Retries](https://razorpay.com/docs/subscriptions/payment-retries/) retries on a fixed T+1, T+2, T+3 day cycle regardless of decline reason — not liquidity-timed (exhausts attempts while account is empty). | **Payday Proximity Sequencer**: Times retries to customer salary liquidity windows ($\le 3$ days), executing debits when funds actually land in the bank account. |
 | **4** | **Conversational Hinglish & Promise-to-Pay (PTP)** | **Static SMS / email links**: Production dunning uses standard notification templates. Razorpay specifically identified conversational voice & PTP trackers as the core frontier in the [Razorpay AI Buildathon Track 03](https://razorpay.com/). | **NLP & Voice PTP Engine**: Extracts conversational dates (*"parso karunga"* / *"5 tarik"*) into structured schedules, tracking stateful `PTP_COMMITTED` $\to$ `RECOVERED`/`PTP_MISSED` transitions. |
-| **5** | **Instrument Invalidation Candidate Bounds** | **Blind daily retries**: [Razorpay Retries Documentation](https://razorpay.com/docs/subscriptions/payment-retries/) confirms the engine retries the same card even on expired cards until attempts exhaust and status becomes `halted`. | **Strict Candidate Bounds**: Sets $\hat{P}(\text{recover}\|\text{same\_rail}) = 0$ on expired cards/revoked mandates, pruning blind retries and shifting instantly to alternate rails or update links. |
+| **5** | **Instrument Invalidation Candidate Bounds** | **Blind daily retries**: [Razorpay Retries Documentation](https://razorpay.com/docs/subscriptions/payment-retries/) confirms the engine retries the same card even on expired cards until attempts exhaust and status becomes `halted`. | **Strict Candidate Bounds**: Sets $\hat{P}(\text{recover} \mid \text{same rail}) = 0$ on expired cards/revoked mandates, pruning blind retries and shifting instantly to alternate rails or update links. |
 | **6** | **Cryptographic Audit Ledger & Provenance** | **Ephemeral webhook retries**: [Razorpay Webhooks](https://razorpay.com/docs/webhooks/) retries payloads on a 24-hr backoff and disables if failing; lacks an immutable, cryptographic hash-chained audit trail. | **SHA-256 Audit Ledger**: Cryptographically hash-chained ledger storing state transitions, idempotency keys, and tamper-evident financial receipts over real-time SSE. |
 | **7** | **Counterfactual Uplift & "The Bar" Benchmark** | **Aggregate volume metrics**: [Razorpay Success Rate Analytics](https://razorpay.com/docs/analytics/success-rate-dashboard/) reports gross success rates and failovers, but provides no causal/counterfactual policy testing framework. | **3-Model Benchmark Harness**: Evaluates Ledger AI vs. Static Rule vs. Random Policy under identical held-out Bernoulli conditions, proving net ₹ recovered uplift ($p < 0.001$). |
 
 ---
 
-## 2. Core Authority Pipeline
+## 2. End-to-End Decision Flow & Authority Pipeline
 
-Triage separates non-authoritative generation (customer copy, conversational PTP) from authoritative idempotent execution:
+Triage runs a strict 5-stage authority pipeline that separates non-authoritative communication from authoritative idempotent execution. **ML decisions run directly inside the Go Gateway via an embedded Random Forest inference engine (<1ms latency)** with zero required external Python services:
 
 ```text
                REVENUE AT RISK SURFACES
@@ -47,7 +47,7 @@ Triage separates non-authoritative generation (customer copy, conversational PTP
                                    ▼
                            ┌───────────────┐
                            │ 3. ML RANKING │
-                           │What is better?│ → Random Forest estimates P(recover|x,a); Expected Recovery Value
+                           │What is better?│ → Embedded Random Forest (P̂); Expected Recovery Value (ERV)
                            └──────┬────────┘
                                    │
                                    ▼
@@ -89,9 +89,40 @@ Triage separates non-authoritative generation (customer copy, conversational PTP
                          └───────────────────┘
 ```
 
+### The 5 Stages of Recovery Decisioning
+
+1. **Deterministic Diagnosis (0 AI)**:
+   * Maps raw decline codes (`INSUFFICIENT_FUNDS`, `GATEWAY_TIMEOUT_504`, `TRANSACTION_TIMEOUT`, `LIMIT_EXCEEDED`, `CARD_EXPIRED`) and gateway step metadata into universal root causes. Zero hallucinations, 100% deterministic.
+
+2. **Context-Aware Eligibility & Candidate Bounds**:
+   * Inspects customer context: available balance, payday proximity, verified backup cards on file, UPI availability, and remaining attempt limits.
+   * Enforces **Gate 1 Solvency Check** for discounts: $\text{AvailableBalance} < \text{InvoiceAmount}$ **AND** $\text{AvailableBalance} \ge \text{InvoiceAmount} - \min(0.05 \times \text{InvoiceAmount}, \text{₹}500)$.
+   * Prunes impossible actions (e.g. 0 blind retries on expired cards).
+
+3. **Embedded Random Forest ML Inference (<1ms, Pure Go)**:
+   * Vectorizes a 12-dimensional feature vector (`amount_paise`, `attempt_number`, `time_since_failure_hours`, `day_of_week`, `hour`, `payday_proximity_days`, `historical_success_rate`, `previous_success_count`, `days_since_last_payment`).
+   * Computes predicted recovery probability $\hat{P}(\text{recover} \mid \mathbf{x}, a)$ for every eligible action.
+   * Computes net **Expected Recovery Value ($\text{ERV}$)**:
+     $$\text{ERV} = \hat{P}(\text{recover} \mid \mathbf{x}, a) \times (\text{Amount} - \text{Discount})$$
+   * Sorts candidate actions by descending $\text{ERV}$ to pick the optimal mathematical intervention.
+   * *Dual Mode*: Automatically queries Python `ml-service` if running (`http://localhost:8000`), otherwise executes embedded Go Random Forest with zero downtime.
+
+4. **Deterministic Policy Engine & Hard Vetoes**:
+   * Evaluates 5 immutable safety rules:
+     * `CANDIDATE_LEGITIMACY`: Proposed action must exist in the context-eligible set.
+     * `MAX_ATTEMPTS_LIMIT`: Current attempts must be $< 3$. When reaching 3, enforces `MARK_LOST_EXHAUSTED`.
+     * `FRAUD_SECURITY_GATE`: If root cause is `FRAUD_SUSPECTED`, immediately vetoes with `STOP`.
+     * `HIGH_VALUE_THRESHOLD`: If amount $\ge \text{₹}10,000$, vetoes automated dunning and routes to Senior Retention Desk (`ESCALATE_HUMAN`).
+     * `CONCESSION_BUDGET_CAP`: Any concession discount must be $\le 5\%$ AND $\le \text{₹}500$.
+
+5. **Execution Envelope & Cryptographic SHA-256 Ledger**:
+   * Executes authorized recovery actions via idempotent API calls (`idem_{case_id}`).
+   * Broadcasts real-time `triage_log` events over SSE to the Live Operations dashboard.
+   * Appends every state transition, policy decision, and financial settlement to the immutable SHA-256 hash-chained recovery ledger.
+
 ---
 
-## 3. Scenario-to-Action Mapping Matrix
+## 3. The 5 Core Storefront Payment Decline Scenarios & Resolutions
 
 Every failure scenario maps to a deterministic eligibility envelope. Discounts and concessions are strictly gated and never offered outside their justified mathematical boundary.
 
@@ -118,11 +149,15 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 * **The Problem**: Static or unconstrained discounting burns margin on customers who either don't need it or where the gap is too wide to close.
 * **The Architecture**:
   1. **Gate 1 — Deterministic Solvency Check (Per-Case)**:
-     $$\text{AvailableBalance} < \text{InvoiceAmount} \quad \text{AND} \quad \text{AvailableBalance} \ge \text{InvoiceAmount} - \min(0.05 \times \text{InvoiceAmount}, \text{₹}500)$$
+     ```text
+     AvailableBalance < InvoiceAmount AND AvailableBalance >= InvoiceAmount - min(0.05 * InvoiceAmount, ₹500)
+     ```
      If this fails, the concession is **strictly forbidden**.
   2. **Gate 2 — Knapsack Budget Solver (Portfolio-Level)**:
-     $$\max \sum_{i} \text{ERV}_i \quad \text{s.t.} \quad \sum_{i} \text{Concession}_i \le \text{DailyConcessionBudget}$$
-     Ranks eligible cases by marginal ERV density: $\frac{\text{ERV}_{\text{with\_discount}} - \text{ERV}_{\text{without\_discount}}}{\text{ConcessionAmount}}$.
+     ```text
+     max Σ ERV_i  subject to  Σ Concession_i <= DailyConcessionBudget
+     ```
+     Ranks eligible cases by marginal ERV density: `(ERV_discount - ERV_no_discount) / ConcessionAmount`.
 * **Integrity**: Gate evaluations are authoritative in the Go backend (`eligibility.go`). No hardcoded case IDs or client-side bypasses exist.
 
 ### Decision 2: Cross-Workflow Customer Coordination
