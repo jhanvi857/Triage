@@ -32,6 +32,9 @@ var (
 	// 3. Ordinal day patterns: "5th ko debit karna", "pay on 10th", "5th"
 	reOrdinalDay = regexp.MustCompile(`(?i)\b(\d{1,2})(?:st|nd|rd|th)\b`)
 
+	// 3b. Hinglish date patterns: "main 5 tarik ko pay kar dunga", "5 tareekh", "5 tarikh", "5 date"
+	reHinglishTarik = regexp.MustCompile(`(?i)\b(\d{1,2})\s*(?:tarik|tareekh|taareekh|tarikh|date)\b`)
+
 	// 4. Relative days: "tomorrow", "day after tomorrow", "today", "kal", "parso"
 	reRelativeDay = regexp.MustCompile(`(?i)\b(tomorrow|day after tomorrow|today|kal|parso)\b`)
 
@@ -98,6 +101,19 @@ func Parse(msg string, baseTime ...time.Time) ParseResult {
 			NeedsHumanReview: true,
 			EscalationReason: "Ambiguous natural-language statement detected. Escalated to human retention desk for review.",
 			ConfidenceScore:  0.0,
+		}
+	}
+
+	// 0. Demo Match: "10 seconds", "in 10s", "in 10 seconds"
+	if strings.Contains(strings.ToLower(cleanMsg), "10 second") || strings.Contains(strings.ToLower(cleanMsg), "10 sec") || strings.Contains(strings.ToLower(cleanMsg), "10s") {
+		t := now.Add(10 * time.Second)
+		return ParseResult{
+			OriginalMessage: cleanMsg,
+			PromiseDetected: true,
+			PromisedDate:    t.Format("2006-01-02 15:04:05 (In 10s - Demo)"),
+			PromisedTime:    t.Format(time.RFC3339),
+			ParsingMethod:   "DEMO_TIMER_REGEX",
+			ConfidenceScore: 0.99,
 		}
 	}
 
@@ -196,6 +212,25 @@ func Parse(msg string, baseTime ...time.Time) ParseResult {
 				PromisedTime:    t.Format(time.RFC3339),
 				ParsingMethod:   "ORDINAL_DAY_REGEX",
 				ConfidenceScore: 0.95,
+			}
+		}
+	}
+
+	// 5b. Check Hinglish Date: "main 5 tarik ko pay kar dunga", "5 tareekh"
+	if m := reHinglishTarik.FindStringSubmatch(cleanMsg); len(m) == 2 {
+		day, _ := strconv.Atoi(m[1])
+		if day >= 1 && day <= 31 {
+			t := time.Date(now.Year(), now.Month(), day, 10, 0, 0, 0, time.UTC)
+			if t.Before(now.Truncate(24 * time.Hour)) {
+				t = time.Date(now.Year(), now.Month()+1, day, 10, 0, 0, 0, time.UTC)
+			}
+			return ParseResult{
+				OriginalMessage: cleanMsg,
+				PromiseDetected: true,
+				PromisedDate:    t.Format("2006-01-02"),
+				PromisedTime:    t.Format(time.RFC3339),
+				ParsingMethod:   "HINGLISH_DATE_REGEX",
+				ConfidenceScore: 0.96,
 			}
 		}
 	}

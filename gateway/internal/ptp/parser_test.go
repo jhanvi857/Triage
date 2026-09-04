@@ -38,10 +38,16 @@ func TestPTPParser_DeterministicExtraction(t *testing.T) {
 		t.Errorf("expected 2026-08-28, got detected=%v date=%s", res5.PromiseDetected, res5.PromisedDate)
 	}
 
-	// 6. Ambiguous natural language must be ESCALATED TO HUMAN (Zero LLM guessing)
+	// 6. Hinglish statement: "main 5 tarik ko pay kar dunga"
+	res6 := Parse("main 5 tarik ko pay kar dunga", refTime)
+	if !res6.PromiseDetected || res6.PromisedDate != "2026-09-05" {
+		t.Errorf("expected 2026-09-05 for Hinglish commitment, got detected=%v date=%s (method=%s)", res6.PromiseDetected, res6.PromisedDate, res6.ParsingMethod)
+	}
+
+	// 7. Ambiguous natural language must be ESCALATED TO HUMAN (Zero LLM guessing)
 	ambiguous := "Actually things are complicated, I'll probably be able to pay sometime after salary comes..."
-	res6 := Parse(ambiguous, refTime)
-	if res6.PromiseDetected || !res6.NeedsHumanReview {
-		t.Errorf("expected ambiguous language to be escalated to human, got detected=%v needs_review=%v", res6.PromiseDetected, res6.NeedsHumanReview)
+	res7 := Parse(ambiguous, refTime)
+	if res7.PromiseDetected || !res7.NeedsHumanReview {
+		t.Errorf("expected ambiguous language to be escalated to human, got detected=%v needs_review=%v", res7.PromiseDetected, res7.NeedsHumanReview)
 	}
 }

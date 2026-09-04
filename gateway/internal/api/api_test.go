@@ -179,14 +179,24 @@ func TestAPI_StrictPTPAccounting_ZeroRecoveredUntilSettlement(t *testing.T) {
 	mux := http.NewServeMux()
 	ts.RegisterRoutes(mux)
 
-	// 1. Initial State: Seed cases exist, no case recovered yet
+	// 1. Initial State: Clean slate, 0 recovered
 	stats := ts.RecoveryMgr.GetStats()
 	if stats.TotalRecoveredPaise != 0 {
 		t.Fatalf("expected initial total_recovered_paise to be 0, got %d", stats.TotalRecoveredPaise)
 	}
 
-	// 2. Register PTP commitment for CASE-8492 (₹4,800 = 480,000 paise)
-	ptpReqBody := `{"case_id":"CASE-8492","message":"Bhai 5th ko debit karna"}`
+	// Create test case dynamically via API (₹4,800 = 480,000 paise)
+	caseReqBody := `{"customer_name":"Acme Cloud Systems","customer_email":"billing@acmecloud.io","plan_name":"Enterprise GPU Cluster","amount_paise":480000,"error_code":"INSUFFICIENT_FUNDS","error_desc":"Balance insufficient"}`
+	caseReq := httptest.NewRequest("POST", "/api/v1/triage/cases", bytes.NewReader([]byte(caseReqBody)))
+	caseW := httptest.NewRecorder()
+	mux.ServeHTTP(caseW, caseReq)
+
+	var created map[string]interface{}
+	_ = json.Unmarshal(caseW.Body.Bytes(), &created)
+	caseID, _ := created["id"].(string)
+
+	// 2. Register PTP commitment for the created case (₹4,800 = 480,000 paise)
+	ptpReqBody := fmt.Sprintf(`{"case_id":"%s","message":"Bhai 5th ko debit karna"}`, caseID)
 	ptpReq := httptest.NewRequest("POST", "/api/v1/triage/ptp/parse", bytes.NewReader([]byte(ptpReqBody)))
 	ptpW := httptest.NewRecorder()
 	mux.ServeHTTP(ptpW, ptpReq)
@@ -196,9 +206,9 @@ func TestAPI_StrictPTPAccounting_ZeroRecoveredUntilSettlement(t *testing.T) {
 	}
 
 	// Check case status: MUST be PTP_COMMITTED
-	c, exists := ts.RecoveryMgr.GetCase("CASE-8492")
+	c, exists := ts.RecoveryMgr.GetCase(caseID)
 	if !exists {
-		t.Fatalf("case CASE-8492 not found")
+		t.Fatalf("case %s not found", caseID)
 	}
 	if c.Status != "PTP_COMMITTED" {
 		t.Fatalf("expected status PTP_COMMITTED after PTP registration, got %s", c.Status)
@@ -217,7 +227,7 @@ func TestAPI_StrictPTPAccounting_ZeroRecoveredUntilSettlement(t *testing.T) {
 	}
 
 	// 3. Simulate arrival of promised date: Settle payment via advance
-	advReq := httptest.NewRequest("POST", "/api/v1/triage/cases/CASE-8492/advance", nil)
+	advReq := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/advance", caseID), nil)
 	advW := httptest.NewRecorder()
 	mux.ServeHTTP(advW, advReq)
 
@@ -225,7 +235,7 @@ func TestAPI_StrictPTPAccounting_ZeroRecoveredUntilSettlement(t *testing.T) {
 		t.Fatalf("expected 200 OK from advance, got %d", advW.Code)
 	}
 
-	cSettled, _ := ts.RecoveryMgr.GetCase("CASE-8492")
+	cSettled, _ := ts.RecoveryMgr.GetCase(caseID)
 	if cSettled.Status != "RECOVERED" {
 		t.Fatalf("expected status RECOVERED after settlement, got %s", cSettled.Status)
 	}
@@ -271,7 +281,7 @@ func TestAPI_EmailPolicy_SuppressesFraudAndDispatchesReceipt(t *testing.T) {
 	}
 
 	// 2. Receipt email for a recovered case
-	receiptReqBody := `{"case_id":"CASE-8492","to":"billing@acmecloud.io","email_type":"PAYMENT_RECEIPT","payment_id":"pay_rec_test_123"}`
+	receiptReqBody := `{"case_id":"` + caseID + `","to":"billing@acmecloud.io","email_type":"PAYMENT_RECEIPT","payment_id":"pay_rec_test_123"}`
 	receiptReq := httptest.NewRequest("POST", "/api/v1/triage/email/send", bytes.NewReader([]byte(receiptReqBody)))
 	receiptW := httptest.NewRecorder()
 	mux.ServeHTTP(receiptW, receiptReq)

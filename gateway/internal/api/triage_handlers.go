@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,6 +39,35 @@ type TriageServer struct {
 	Coordinator   *recovery.Coordinator
 	Scheduler     *recovery.Scheduler
 	BudgetMgr     *budget.Manager
+	velocityMu    sync.Mutex
+	velocityMap   map[string][]time.Time
+}
+
+// checkVelocityAnomaly tracks rapid successive failure attempts per customer within a 10-minute sliding window
+func (ts *TriageServer) checkVelocityAnomaly(customerKey string) (bool, int) {
+	ts.velocityMu.Lock()
+	defer ts.velocityMu.Unlock()
+	if ts.velocityMap == nil {
+		ts.velocityMap = make(map[string][]time.Time)
+	}
+
+	now := time.Now().UTC()
+	cutoff := now.Add(-10 * time.Minute)
+
+	var recent []time.Time
+	for _, t := range ts.velocityMap[customerKey] {
+		if t.After(cutoff) {
+			recent = append(recent, t)
+		}
+	}
+	recent = append(recent, now)
+	ts.velocityMap[customerKey] = recent
+
+	// more than 5 failed checkout attempts within 10 minutes triggers security velocity gate
+	if len(recent) > 5 {
+		return true, len(recent)
+	}
+	return false, len(recent)
 }
 
 // NewTriageServer creates a triage API server
@@ -69,6 +99,7 @@ func NewTriageServer(diag *diagnosis.Engine, inter *intervention.Selector, mgr *
 		Coordinator:   coord,
 		Scheduler:     sched,
 		BudgetMgr:     budgetMgr,
+		velocityMap:   make(map[string][]time.Time),
 	}
 }
 
@@ -137,6 +168,23 @@ func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, i
 		availBalPaise = int64(amtF) - discountCostPaise
 	}
 
+	attempts := 0
+	if errCode == "ATTEMPTS_EXHAUSTED" || errReason == "attempts_exhausted" {
+		attempts = 3
+	}
+
+	customerKey := email
+	if customerKey == "" {
+		customerKey = "storefront_customer"
+	}
+	isVelocitySpike, attemptsCount := ts.checkVelocityAnomaly(customerKey)
+	if isVelocitySpike && errCode != "ATTEMPTS_EXHAUSTED" {
+		errCode = "FRAUD_SUSPECTED"
+		errReason = "fraud_velocity_risk"
+		errSrc = "risk"
+		errDesc = fmt.Sprintf("High-velocity anomaly triggered: %d failure attempts in <10m", attemptsCount)
+	}
+
 	c := &recovery.Case{
 		ID:                    caseID,
 		CustomerID:            fmt.Sprintf("cust_%s", strings.TrimPrefix(caseID, "CASE-")),
@@ -158,7 +206,7 @@ func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, i
 		HistoricalSuccessRate: 0.75,
 		Status:                recovery.StatusNew,
 		Source:                "LIVE",
-		AttemptsMade:          0,
+		AttemptsMade:          attempts,
 		MaxAttempts:           3,
 		IdempotencyKey:        fmt.Sprintf("idem_%s", caseID),
 		IsSimulated:           isDebug,
@@ -180,14 +228,14 @@ func (ts *TriageServer) IngestRazorpayWebhook(payload razorpay.WebhookPayload, i
 
 	// Auto-advance to Intervening to generate the template message
 	extraCtx := map[string]interface{}{
-		"payday_proximity_days":         c.PaydayProximityDays,
-		"historical_success_rate":       c.HistoricalSuccessRate,
-		"attempt_number":                c.AttemptsMade + 1,
-		"has_alternate_saved_card":      c.HasAlternateSavedCard,
-		"alternate_saved_card_label":    c.AlternateSavedCardLabel,
-		"alternate_card_success_count":  c.AlternateCardSuccessCount,
-		"has_upi_available":             c.HasUPIAvailable,
-		"available_balance_paise":       c.AvailableBalancePaise,
+		"payday_proximity_days":        c.PaydayProximityDays,
+		"historical_success_rate":      c.HistoricalSuccessRate,
+		"attempt_number":               c.AttemptsMade + 1,
+		"has_alternate_saved_card":     c.HasAlternateSavedCard,
+		"alternate_saved_card_label":   c.AlternateSavedCardLabel,
+		"alternate_card_success_count": c.AlternateCardSuccessCount,
+		"has_upi_available":            c.HasUPIAvailable,
+		"available_balance_paise":      c.AvailableBalancePaise,
 	}
 
 	decision := ts.InterSelector.SelectIntervention(c.ID, *c.Diagnosis, c.AttemptsMade, c.AmountPaise, c.OriginalRail, 50000, extraCtx)
@@ -308,10 +356,10 @@ func (ts *TriageServer) handleCases(w http.ResponseWriter, r *http.Request) {
 
 		c := &recovery.Case{
 			ID:                        caseID,
-			CustomerID:            custID,
-			CustomerName:          req.CustomerName,
-			CustomerEmail:         custEmail,
-			PlanName:              req.PlanName,
+			CustomerID:                custID,
+			CustomerName:              req.CustomerName,
+			CustomerEmail:             custEmail,
+			PlanName:                  req.PlanName,
 			SourceType:                srcType,
 			AmountPaise:               req.AmountPaise,
 			AmountINR:                 float64(req.AmountPaise) / 100.0,
@@ -345,13 +393,13 @@ func (ts *TriageServer) handleCases(w http.ResponseWriter, r *http.Request) {
 
 		// Step 2: Immediate Context-Aware Eligibility + ML Candidate Ranking & Policy Check
 		extraCtx := map[string]interface{}{
-			"payday_proximity_days":         c.PaydayProximityDays,
-			"historical_success_rate":       c.HistoricalSuccessRate,
-			"attempt_number":                c.AttemptsMade + 1,
-			"has_alternate_saved_card":      c.HasAlternateSavedCard,
-			"alternate_saved_card_label":    c.AlternateSavedCardLabel,
-			"alternate_card_success_count":  c.AlternateCardSuccessCount,
-			"has_upi_available":             c.HasUPIAvailable,
+			"payday_proximity_days":        c.PaydayProximityDays,
+			"historical_success_rate":      c.HistoricalSuccessRate,
+			"attempt_number":               c.AttemptsMade + 1,
+			"has_alternate_saved_card":     c.HasAlternateSavedCard,
+			"alternate_saved_card_label":   c.AlternateSavedCardLabel,
+			"alternate_card_success_count": c.AlternateCardSuccessCount,
+			"has_upi_available":            c.HasUPIAvailable,
 		}
 		decision := ts.InterSelector.SelectIntervention(c.ID, diag, c.AttemptsMade, c.AmountPaise, c.OriginalRail, 50000, extraCtx)
 		c.Intervention = &decision
@@ -504,15 +552,15 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 			}
 
 			extraCtx := map[string]interface{}{
-				"payday_proximity_days":         c.PaydayProximityDays,
-				"historical_success_rate":       c.HistoricalSuccessRate,
-				"attempt_number":                c.AttemptsMade + 1,
-				"has_alternate_saved_card":      c.HasAlternateSavedCard,
-				"alternate_saved_card_label":    c.AlternateSavedCardLabel,
-				"alternate_card_success_count":  c.AlternateCardSuccessCount,
-				"has_upi_available":             c.HasUPIAvailable,
-				"human_desk_slots_remaining":    5, // TODO: wire from live allocator state
-				"available_balance_paise":       c.AvailableBalancePaise,
+				"payday_proximity_days":        c.PaydayProximityDays,
+				"historical_success_rate":      c.HistoricalSuccessRate,
+				"attempt_number":               c.AttemptsMade + 1,
+				"has_alternate_saved_card":     c.HasAlternateSavedCard,
+				"alternate_saved_card_label":   c.AlternateSavedCardLabel,
+				"alternate_card_success_count": c.AlternateCardSuccessCount,
+				"has_upi_available":            c.HasUPIAvailable,
+				"human_desk_slots_remaining":   5, // TODO: wire from live allocator state
+				"available_balance_paise":      c.AvailableBalancePaise,
 			}
 
 			// Use real budget snapshot instead of hardcoded value
@@ -612,7 +660,7 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 				c.Status = recovery.StatusRetryScheduled
 				c.RecoveredAmountPaise = 0 // STRICT: ₹0 recovered until actual capture
 				c.NextRetryAt = &retryAt
-				ts.RecoveryMgr.SaveCase(c, "RETRY_SCHEDULED", fmt.Sprintf("Recovery action '%s' approved and scheduled. Payment pending execution — ₹0 recovered until Razorpay capture confirmation.", actionName))
+				ts.RecoveryMgr.SaveCase(c, "RETRY_SCHEDULED", fmt.Sprintf("Recovery action '%s' approved and scheduled. Payment pending execution - ₹0 recovered until Razorpay capture confirmation.", actionName))
 
 				// AUTOMATIC RETRY SCHEDULE DISPATCH
 				if ts.EmailService != nil && c.CustomerEmail != "" {
@@ -756,36 +804,45 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 	// POST /api/v1/triage/cases/:id/resolve
 	if len(parts) == 2 && parts[1] == "resolve" && r.Method == http.MethodPost {
 		var req struct {
-			Resolution string `json:"resolution"` // "RECOVERED", "RETRY_SCHEDULED", "PTP_COMMITTED", "PTP_MISSED", "LOST", "ESCALATED"
-			Notes      string `json:"notes"`
+			Resolution           string  `json:"resolution"` // "RECOVERED", "RETRY_SCHEDULED", "PTP_COMMITTED", "PTP_MISSED", "LOST", "ESCALATED"
+			Notes                string  `json:"notes"`
+			RecoveredAmountPaise int64   `json:"recovered_amount_paise"`
+			RecoveredAmountINR   float64 `json:"recovered_amount_inr"`
+			DiscountPaise        int64   `json:"discount_paise"`
+			DiscountINR          float64 `json:"discount_inr"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
 		if req.Resolution == recovery.StatusRecovered || req.Resolution == "RECOVERED" {
 			payID := fmt.Sprintf("pay_upi_%s", strings.TrimPrefix(c.ID, "CASE-"))
 
-			isFunds := (c.Diagnosis != nil && c.Diagnosis.RootCause == "INSUFFICIENT_FUNDS") || c.ErrorCode == "INSUFFICIENT_FUNDS"
 			var capturedPaise int64 = c.AmountPaise
 			var discountPaise int64 = 0
 
 			maxDiscountPaise := int64(float64(c.AmountPaise) * 0.05)
 			if maxDiscountPaise > 50000 {
-				maxDiscountPaise = 50000
+				maxDiscountPaise = 50000 // capped at ₹500
 			}
 
-			gapClosing := true
-			if c.AvailableBalancePaise > 0 {
-				gapClosing = c.AvailableBalancePaise < c.AmountPaise && c.AvailableBalancePaise >= (c.AmountPaise-maxDiscountPaise)
-			}
-
+			isFunds := (c.Diagnosis != nil && c.Diagnosis.RootCause == "INSUFFICIENT_FUNDS") || c.ErrorCode == "INSUFFICIENT_FUNDS"
 			isConcessionClaimed := strings.Contains(strings.ToLower(req.Notes), "concession") ||
 				strings.Contains(strings.ToLower(req.Notes), "discount") ||
-				strings.Contains(strings.ToLower(req.Notes), "%")
+				strings.Contains(strings.ToLower(req.Notes), "%") ||
+				req.DiscountPaise > 0 || req.DiscountINR > 0
 
-			if isFunds && (gapClosing || isConcessionClaimed) {
-				discountPaise = maxDiscountPaise
+			if req.DiscountPaise > 0 {
+				discountPaise = req.DiscountPaise
 				capturedPaise = c.AmountPaise - discountPaise
-			} else if isConcessionClaimed {
+			} else if req.DiscountINR > 0 {
+				discountPaise = int64(req.DiscountINR * 100)
+				capturedPaise = c.AmountPaise - discountPaise
+			} else if req.RecoveredAmountPaise > 0 && req.RecoveredAmountPaise < c.AmountPaise {
+				capturedPaise = req.RecoveredAmountPaise
+				discountPaise = c.AmountPaise - capturedPaise
+			} else if req.RecoveredAmountINR > 0 && int64(req.RecoveredAmountINR*100) < c.AmountPaise {
+				capturedPaise = int64(req.RecoveredAmountINR * 100)
+				discountPaise = c.AmountPaise - capturedPaise
+			} else if isConcessionClaimed || isFunds {
 				discountPaise = maxDiscountPaise
 				capturedPaise = c.AmountPaise - discountPaise
 			}
@@ -1446,7 +1503,7 @@ func (ts *TriageServer) handleSchedulerTrigger(w http.ResponseWriter, r *http.Re
 
 	// Step 2: Confirmed capture from Razorpay via RecordCapture single canonical write path
 	payID := fmt.Sprintf("pay_sched_%s_%d", strings.TrimPrefix(c.ID, "CASE-"), dueStep.StepIndex)
-	c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, 0, dueStep.Action, fmt.Sprintf("Confirmed Razorpay capture for step #%d ('%s') — recovered ₹%.2f (%s)", dueStep.StepIndex, dueStep.Action, float64(c.AmountPaise)/100.0, payID))
+	c, _ = ts.RecoveryMgr.RecordCapture(c.ID, payID, c.AmountPaise, 0, dueStep.Action, fmt.Sprintf("Confirmed Razorpay capture for step #%d ('%s') - recovered ₹%.2f (%s)", dueStep.StepIndex, dueStep.Action, float64(c.AmountPaise)/100.0, payID))
 
 	// AUTOMATIC RECEIPT EMAIL
 	if ts.EmailService != nil && c.CustomerEmail != "" {
@@ -1464,10 +1521,10 @@ func (ts *TriageServer) handleSchedulerTrigger(w http.ResponseWriter, r *http.Re
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":         "STEP_EXECUTED",
-		"case_id":        c.ID,
-		"executed_step":  dueStep,
-		"case":           c,
+		"status":        "STEP_EXECUTED",
+		"case_id":       c.ID,
+		"executed_step": dueStep,
+		"case":          c,
 	})
 }
 
@@ -1600,7 +1657,7 @@ func (ts *TriageServer) handleSendEmail(w http.ResponseWriter, r *http.Request) 
 
 				if req.EmailType == "ACTION_REQUIRED" || req.EmailType == "" {
 					if req.Reason == "" || (c.Diagnosis != nil && req.Reason == c.Diagnosis.CustomerFacingMsg) {
-						req.Reason = fmt.Sprintf("Account balance shortage — %s Instant Concession applied: Pay ₹%.2f (reduced from ₹%.2f)", pctStr, req.AmountINR, float64(c.AmountPaise)/100.0)
+						req.Reason = fmt.Sprintf("Account balance shortage - %s Instant Concession applied: Pay ₹%.2f (reduced from ₹%.2f)", pctStr, req.AmountINR, float64(c.AmountPaise)/100.0)
 					}
 				}
 			} else {
@@ -1700,4 +1757,3 @@ func (ts *TriageServer) handleSendEmail(w http.ResponseWriter, r *http.Request) 
 
 	json.NewEncoder(w).Encode(result)
 }
-

@@ -133,13 +133,15 @@ func (h *Harness) RunBatch(numCases int) Result {
 		{"3DS_DROP_OFF", "OTP challenge window abandoned", "payment_cancelled_by_user", "customer", "payment_authentication", "UPI", 180000, 5, 0.75, 0.5, 14, 1},
 		// 7. OTP Drop-off (Nighttime): Customer payment link wins
 		{"OTP_NIGHT_DROP", "OTP screen closed late night", "payment_cancelled_by_user", "customer", "payment_authentication", "UPI", 220000, 5, 0.70, 6.0, 23, 1},
-		// 8. Mandate revoked (Small subscription): 5% Concession wins
+		// 8. Mandate limit exceeded (Single charge breaches per-debit cap): One-Time UPI wins
+		{"MANDATE_LIMIT_BREACH", "Auto-debit breaches ₹15k per-debit mandate ceiling", "mandate_max_amount_breached", "bank", "payment_initiation", "NACH_MANDATE", 1850000, 10, 0.90, 0.5, 14, 1},
+		// 9. Mandate revoked (Small subscription): 5% Concession wins
 		{"MANDATE_REVOKED", "Autopay revoked at customer bank", "mandate_cancelled_at_bank", "bank", "payment_authorization", "NACH_MANDATE", 350000, 12, 0.65, 1.5, 12, 1},
-		// 9. High-Value Mandate Revoked (>= ₹10k): Policy stops & escalates to human desk
+		// 10. High-Value Mandate Revoked (>= ₹10k): Policy stops & escalates to human desk
 		{"MANDATE_ENTERPRISE_STOP", "Enterprise mandate paused", "mandate_cancelled_at_bank", "bank", "payment_authorization", "NACH_MANDATE", 1250000, 12, 0.55, 2.0, 11, 1},
-		// 10. Fraud Suspected: Immediate stop / Human escalation
+		// 11. Fraud Suspected: Immediate stop / Human escalation
 		{"RISK_VELOCITY_TRIGGER", "Velocity trigger exceeded", "risk_threshold_exceeded", "risk", "payment_initiation", "CARD", 980000, 2, 0.30, 0.2, 16, 1},
-		// 11. Network decline: Exponential backoff
+		// 12. Network decline: Exponential backoff
 		{"NET_TRANSPORT_DROP", "TCP reset on issuer connection", "network_error", "gateway", "payment_authorization", "CARD", 290000, 7, 0.88, 0.8, 17, 1},
 	}
 
@@ -414,6 +416,21 @@ func computeGroundTruthProb(f mlclient.CaseFeatures, action string) float64 {
 				return 0.58
 			}
 			return 0.15
+		}
+
+	case "MANDATE_LIMIT":
+		switch action {
+		case "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
+			// Dominant one-time UPI: same-day, zero friction, mandate untouched for next cycle
+			return 0.89
+		case "REQUEST_MANDATE_LIMIT_INCREASE":
+			// Async background action: multi-day re-auth
+			return 0.35
+		case "ESCALATE_HUMAN":
+			if f.AmountPaise >= 1500000 {
+				return 0.50
+			}
+			return 0.20
 		}
 
 	case "MANDATE_REVOKED":

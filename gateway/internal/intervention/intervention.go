@@ -27,27 +27,27 @@ type ActionDecisionRationale struct {
 
 // Decision contains the selected intervention, ML rankings, candidate provenance, and policy engine veto checks
 type Decision struct {
-	CaseID               string                      `json:"case_id"`
-	Action               string                      `json:"action"`
-	Reasoning            string                      `json:"reasoning"`
-	TargetRail           string                      `json:"target_rail,omitempty"`
-	CooldownDuration     time.Duration               `json:"cooldown_duration"`
-	NextExecutionAt      time.Time                   `json:"next_execution_at"`
-	IncentiveAmountPaise int64                       `json:"incentive_amount_paise,omitempty"`
-	IncentivePercent     float64                     `json:"incentive_percent,omitempty"`
-	IsStoppingRuleHit    bool                        `json:"is_stopping_rule_hit"`
-	StoppingReason       string                      `json:"stopping_reason,omitempty"`
-	PolicyVerdict        string                      `json:"policy_verdict"` // "AUTHORIZED" or "VETOED"
-	PolicyRules          []PolicyRuleEvaluation      `json:"policy_rules"`
-	CandidateEvaluations []CandidateEvaluation       `json:"candidate_evaluations,omitempty"`
-	ActionRationale      *ActionDecisionRationale    `json:"action_rationale,omitempty"`
-	MLRankings           []mlclient.RankedCandidate  `json:"ml_rankings,omitempty"`
-	MLRecommendation     string                      `json:"ml_recommendation,omitempty"`
-	MLProbability        float64                     `json:"ml_probability,omitempty"`
-	MLExpectedValuePaise int64                       `json:"ml_expected_value_paise,omitempty"`
+	CaseID               string                       `json:"case_id"`
+	Action               string                       `json:"action"`
+	Reasoning            string                       `json:"reasoning"`
+	TargetRail           string                       `json:"target_rail,omitempty"`
+	CooldownDuration     time.Duration                `json:"cooldown_duration"`
+	NextExecutionAt      time.Time                    `json:"next_execution_at"`
+	IncentiveAmountPaise int64                        `json:"incentive_amount_paise,omitempty"`
+	IncentivePercent     float64                      `json:"incentive_percent,omitempty"`
+	IsStoppingRuleHit    bool                         `json:"is_stopping_rule_hit"`
+	StoppingReason       string                       `json:"stopping_reason,omitempty"`
+	PolicyVerdict        string                       `json:"policy_verdict"` // "AUTHORIZED" or "VETOED"
+	PolicyRules          []PolicyRuleEvaluation       `json:"policy_rules"`
+	CandidateEvaluations []CandidateEvaluation        `json:"candidate_evaluations,omitempty"`
+	ActionRationale      *ActionDecisionRationale     `json:"action_rationale,omitempty"`
+	MLRankings           []mlclient.RankedCandidate   `json:"ml_rankings,omitempty"`
+	MLRecommendation     string                       `json:"ml_recommendation,omitempty"`
+	MLProbability        float64                      `json:"ml_probability,omitempty"`
+	MLExpectedValuePaise int64                        `json:"ml_expected_value_paise,omitempty"`
 	ShadowBandit         *mlclient.ShadowBanditReport `json:"shadow_bandit,omitempty"`
-	MaxAttempts          int                         `json:"max_attempts"`
-	CurrentAttempt       int                         `json:"current_attempt"`
+	MaxAttempts          int                          `json:"max_attempts"`
+	CurrentAttempt       int                          `json:"current_attempt"`
 }
 
 // Selector evaluates diagnosis, context-aware eligibility, ML ranking, and policy vetoes
@@ -244,7 +244,8 @@ func (s *Selector) SelectIntervention(
 	}
 
 	// Rule 4: High-Value Escalation Threshold (₹15,000)
-	highValuePassed := amountPaise < s.HighValueThreshold
+	// Exempt PROMISE_TO_PAY and OVERDUE_INVOICE from automated dunning ceiling since PTP is a non-monetary customer commitment
+	highValuePassed := amountPaise < s.HighValueThreshold || report.RootCause == diagnosis.CauseOverdueInvoice || topCandidate.Action == ActionPromiseToPay
 	policyRules = append(policyRules, PolicyRuleEvaluation{
 		RuleName: "HIGH_VALUE_THRESHOLD",
 		Passed:   highValuePassed,
@@ -272,7 +273,7 @@ func (s *Selector) SelectIntervention(
 		Reason:   fmt.Sprintf("Concession ₹%.2f capped at ≤5%% AND ≤₹%.2f", float64(incentiveAmountPaise)/100.0, float64(s.MaxIncentiveCapPaise)/100.0),
 	})
 
-	// Rule 6: Budget Sufficiency — hard veto if ML recommends INCENTIVE_DISCOUNT but budget can't cover it
+	// Rule 6: Budget Sufficiency - hard veto if ML recommends INCENTIVE_DISCOUNT but budget can't cover it
 	budgetSufficiencyPassed := true
 	if topCandidate.Action == ActionIncentiveDiscount && incentiveAmountPaise > 0 {
 		budgetSufficiencyPassed = availableBudgetPaise >= incentiveAmountPaise
@@ -379,6 +380,9 @@ func (s *Selector) SelectIntervention(
 	case ActionReauthorizeMandate:
 		cooldown = 2 * time.Hour
 		targetRail = "MANDATE_AUTH"
+	case ActionRequestMandateLimitIncrease:
+		cooldown = 24 * time.Hour
+		targetRail = "MANDATE_AUTH"
 	case ActionCollectOutstandingPayment:
 		cooldown = 1 * time.Hour
 		targetRail = "INVOICE"
@@ -407,4 +411,3 @@ func (s *Selector) SelectIntervention(
 		CurrentAttempt:       nextAttempt,
 	}
 }
-

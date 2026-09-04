@@ -34,17 +34,17 @@ type PriorityExplanation struct {
 
 // PrioritizedOpportunity is a case ranked by expected recovery value
 type PrioritizedOpportunity struct {
-	CaseID          string              `json:"case_id"`
-	CustomerID      string              `json:"customer_id"`
-	CustomerName    string              `json:"customer_name"`
-	SourceType      string              `json:"source_type"`
-	AmountPaise     int64               `json:"amount_paise"`
-	AmountINR       float64             `json:"amount_inr"`
-	Status          string              `json:"status"`
-	Action          string              `json:"action,omitempty"`
-	PriorityScore   float64             `json:"priority_score"`
-	PriorityRank    int                 `json:"priority_rank"`
-	Explanation     PriorityExplanation `json:"explanation"`
+	CaseID        string              `json:"case_id"`
+	CustomerID    string              `json:"customer_id"`
+	CustomerName  string              `json:"customer_name"`
+	SourceType    string              `json:"source_type"`
+	AmountPaise   int64               `json:"amount_paise"`
+	AmountINR     float64             `json:"amount_inr"`
+	Status        string              `json:"status"`
+	Action        string              `json:"action,omitempty"`
+	PriorityScore float64             `json:"priority_score"`
+	PriorityRank  int                 `json:"priority_rank"`
+	Explanation   PriorityExplanation `json:"explanation"`
 }
 
 // PortfolioSummary contains the prioritized queue and aggregate metrics
@@ -148,10 +148,10 @@ func ComputePriority(c *Case) PriorityExplanation {
 		netExpectedPaise = 0
 	}
 
-	// 4. Time Sensitivity — deterministic bounded function per source type
+	// 4. Time Sensitivity - deterministic bounded function per source type
 	timeSensitivity, tsReason := computeTimeSensitivity(c)
 
-	// 5. Customer Value Factor — based on observed historical profile
+	// 5. Customer Value Factor - based on observed historical profile
 	// Cold-start (HistoricalAttempts == 0 or unobserved): 1.0 (neutral multiplier)
 	// Observed history (HistoricalAttempts > 0): 0.5 + HistoricalSuccessRate
 	//   - 0% success (e.g. 0/10) -> 0.5 (maximum penalty, not 1.0 default)
@@ -179,7 +179,7 @@ func ComputePriority(c *Case) PriorityExplanation {
 		riskPenaltyPaise += 1000 // ₹10 per case nearing exhaustion
 	}
 	if c.Diagnosis != nil && c.Diagnosis.RootCause == "FRAUD_SUSPECTED" {
-		riskPenaltyPaise += c.AmountPaise // Full penalty for fraud — effectively zeros score
+		riskPenaltyPaise += c.AmountPaise // Full penalty for fraud - effectively zeros score
 	}
 
 	// Portfolio Priority Score = NetExpectedRecovery × TimeSensitivity × CVF - RiskPenalty

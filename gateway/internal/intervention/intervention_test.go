@@ -90,4 +90,54 @@ func TestIntervention_ContextualRankingAndPolicyVetoes(t *testing.T) {
 	if dec7.PolicyVerdict != "VETOED" || dec7.Action != ActionEscalateHuman {
 		t.Errorf("expected fraud to be VETOED and escalated to risk, got verdict=%s action=%s", dec7.PolicyVerdict, dec7.Action)
 	}
+
+	// 8. Mandate Limit Exceeded -> Dominant One-Time UPI Switch (mandate preserved)
+	repMandateLimit := diagnosis.DiagnosticReport{
+		CaseID:    "CASE-08",
+		RootCause: diagnosis.CauseMandateLimit,
+	}
+	dec8 := sel.SelectIntervention("CASE-08", repMandateLimit, 0, 180000, "NACH_MANDATE", 50000)
+	if dec8.Action != ActionSwitchToAvailableAlternateRail {
+		t.Errorf("expected MANDATE_LIMIT to select %s, got %s", ActionSwitchToAvailableAlternateRail, dec8.Action)
+	}
+	if dec8.PolicyVerdict != "AUTHORIZED" {
+		t.Errorf("expected MANDATE_LIMIT to be AUTHORIZED, got %s", dec8.PolicyVerdict)
+	}
+	if len(dec8.CandidateEvaluations) < 3 {
+		t.Errorf("expected at least 3 candidate evaluations for MANDATE_LIMIT")
+	}
+
+	// 9. Overdue B2B Enterprise Invoice -> Dominant PROMISE_TO_PAY recovery
+	repOverdue := diagnosis.DiagnosticReport{
+		CaseID:    "CASE-09",
+		RootCause: diagnosis.CauseOverdueInvoice,
+	}
+	dec9 := sel.SelectIntervention("CASE-09", repOverdue, 0, 1200000, "BANK_TRANSFER", 50000)
+	if dec9.Action != ActionPromiseToPay {
+		t.Errorf("expected OVERDUE_INVOICE to select %s, got %s", ActionPromiseToPay, dec9.Action)
+	}
+	if dec9.PolicyVerdict != "AUTHORIZED" {
+		t.Errorf("expected OVERDUE_INVOICE to be AUTHORIZED, got %s", dec9.PolicyVerdict)
+	}
+}
+
+func TestIntervention_PTPGatingInvariants(t *testing.T) {
+	// Rule 3 Invariant: PROMISE_TO_PAY must be allowed for OVERDUE_INVOICE & INSUFFICIENT_FUNDS
+	if !IsActionAllowed(diagnosis.CauseOverdueInvoice, ActionPromiseToPay) {
+		t.Errorf("PROMISE_TO_PAY MUST be allowed for OVERDUE_INVOICE")
+	}
+	if !IsActionAllowed(diagnosis.CauseInsufficientFunds, ActionPromiseToPay) {
+		t.Errorf("PROMISE_TO_PAY MUST be allowed for INSUFFICIENT_FUNDS")
+	}
+
+	// Rule 3 Invariant: PROMISE_TO_PAY must NOT be allowed for MANDATE_REVOKED, MANDATE_LIMIT, or EXPIRED_CARD
+	if IsActionAllowed(diagnosis.CauseMandateRevoked, ActionPromiseToPay) {
+		t.Errorf("PROMISE_TO_PAY MUST NOT be allowed for MANDATE_REVOKED")
+	}
+	if IsActionAllowed(diagnosis.CauseMandateLimit, ActionPromiseToPay) {
+		t.Errorf("PROMISE_TO_PAY MUST NOT be allowed for MANDATE_LIMIT")
+	}
+	if IsActionAllowed(diagnosis.CauseExpiredCard, ActionPromiseToPay) {
+		t.Errorf("PROMISE_TO_PAY MUST NOT be allowed for EXPIRED_CARD")
+	}
 }

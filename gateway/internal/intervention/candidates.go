@@ -6,18 +6,19 @@ import (
 
 // Bounded recovery action constants
 const (
-	ActionSwitchToSavedCard               = "SWITCH_TO_SAVED_CARD"
-	ActionRetryNextPaydayWindow           = "RETRY_NEXT_PAYDAY_WINDOW"
-	ActionPromiseToPay                    = "PROMISE_TO_PAY"
-	ActionUpdatePaymentMethod             = "UPDATE_PAYMENT_METHOD"
-	ActionRetrySameRailCooldown           = "RETRY_SAME_RAIL_COOLDOWN"
-	ActionSwitchToAvailableAlternateRail  = "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"
-	ActionResumeCheckout                  = "RESUME_CHECKOUT"
-	ActionReauthorizeMandate              = "REAUTHORIZE_MANDATE"
-	ActionCollectOutstandingPayment       = "COLLECT_OUTSTANDING_PAYMENT"
-	ActionEscalateHuman                   = "ESCALATE_HUMAN"
-	ActionStop                            = "STOP"
-	ActionMarkLost                        = "MARK_LOST_EXHAUSTED"
+	ActionSwitchToSavedCard              = "SWITCH_TO_SAVED_CARD"
+	ActionRetryNextPaydayWindow          = "RETRY_NEXT_PAYDAY_WINDOW"
+	ActionPromiseToPay                   = "PROMISE_TO_PAY"
+	ActionUpdatePaymentMethod            = "UPDATE_PAYMENT_METHOD"
+	ActionRetrySameRailCooldown          = "RETRY_SAME_RAIL_COOLDOWN"
+	ActionSwitchToAvailableAlternateRail = "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL"
+	ActionResumeCheckout                 = "RESUME_CHECKOUT"
+	ActionReauthorizeMandate             = "REAUTHORIZE_MANDATE"
+	ActionRequestMandateLimitIncrease    = "REQUEST_MANDATE_LIMIT_INCREASE"
+	ActionCollectOutstandingPayment      = "COLLECT_OUTSTANDING_PAYMENT"
+	ActionEscalateHuman                  = "ESCALATE_HUMAN"
+	ActionStop                           = "STOP"
+	ActionMarkLost                       = "MARK_LOST_EXHAUSTED"
 
 	// Legacy aliases preserved for backward compatibility in data pipelines
 	ActionRetryLater            = ActionRetrySameRailCooldown
@@ -42,6 +43,11 @@ type CandidateActionDefinition struct {
 
 // AllowedCandidatesByCause defines the standard policy-approved candidate set for fallback
 var AllowedCandidatesByCause = map[string][]string{
+	diagnosis.CauseOverdueInvoice: {
+		ActionPromiseToPay,
+		ActionCollectOutstandingPayment,
+		ActionEscalateHuman,
+	},
 	diagnosis.CauseBankDowntime: {
 		ActionRetrySameRailCooldown,
 		ActionSwitchToAvailableAlternateRail,
@@ -58,13 +64,16 @@ var AllowedCandidatesByCause = map[string][]string{
 	},
 	diagnosis.CauseExpiredCard: {
 		ActionUpdatePaymentMethod,
-		ActionPromiseToPay,
+		ActionEscalateHuman,
+	},
+	diagnosis.CauseMandateLimit: {
+		ActionSwitchToAvailableAlternateRail,
+		ActionRequestMandateLimitIncrease,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseMandateRevoked: {
 		ActionReauthorizeMandate,
 		ActionCollectOutstandingPayment,
-		ActionPromiseToPay,
 		ActionEscalateHuman,
 	},
 	diagnosis.CauseOtpDropoff: {
@@ -117,4 +126,3 @@ func IsActionAllowed(cause, action string) bool {
 	}
 	return false
 }
-

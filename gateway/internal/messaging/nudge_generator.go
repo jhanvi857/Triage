@@ -103,6 +103,12 @@ var ActionNotificationLookup = map[string]NotificationPolicy{
 		TemplateKey:    "REAUTHORIZE_MANDATE",
 		Description:    "1-click mandate re-linking authorization link for revoked recurring billing",
 	},
+	intervention.ActionRequestMandateLimitIncrease: {
+		CustomerFacing: true,
+		Channel:        "EMAIL",
+		TemplateKey:    "MANDATE_LIMIT_INCREASE",
+		Description:    "Async mandate limit modification request link for tier upgrade",
+	},
 	intervention.ActionSwitchToAvailableAlternateRail: {
 		CustomerFacing: true,
 		Channel:        "EMAIL",
@@ -286,6 +292,12 @@ func (na *NudgeAgent) draftWhatsApp(req NudgeRequest, amount string, now time.Ti
 		primaryCTA = "Re-Authorize Mandate"
 		secondaryCTA = "Pay One-Time"
 
+	case intervention.ActionRequestMandateLimitIncrease:
+		headline = "Mandate Limit Increase"
+		body = fmt.Sprintf("Hi %s, your transaction of %s exceeds your per-debit autopay limit. Click below to request a mandate limit increase at your bank.", req.CustomerName, amount)
+		primaryCTA = "Increase Mandate Limit"
+		secondaryCTA = "Pay One-Time UPI"
+
 	case intervention.ActionCollectOutstandingPayment:
 		headline = "Outstanding Subscription Invoice"
 		body = fmt.Sprintf("Hi %s, your subscription invoice of %s is pending payment. Click below to settle via any supported payment method.", req.CustomerName, amount)
@@ -354,6 +366,11 @@ func (na *NudgeAgent) draftEmail(req NudgeRequest, amount string, now time.Time)
 		subject = fmt.Sprintf("Action Required: Re-Authorize Autopay Mandate for %s", amount)
 		body = fmt.Sprintf("Dear %s,\n\nYour recurring autopay mandate for %s was interrupted by your bank.\n\nPlease re-authorize your mandate in 1 step to keep your compute active.", req.CustomerName, amount)
 		primaryCTA = "Re-Authorize Mandate"
+
+	case intervention.ActionRequestMandateLimitIncrease:
+		subject = fmt.Sprintf("Update Required: Increase Autopay Mandate Limit for %s", amount)
+		body = fmt.Sprintf("Dear %s,\n\nYour recent charge of %s exceeded your current per-debit mandate ceiling.\n\nPlease follow the link below to authorize a higher limit with your bank so future cycles process seamlessly.", req.CustomerName, amount)
+		primaryCTA = "Increase Mandate Limit"
 
 	case intervention.ActionIncentiveDiscount:
 		subject = fmt.Sprintf("Special Offer: Complete Your Renewal for %s", amount)

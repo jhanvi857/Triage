@@ -48,9 +48,9 @@ type RecoveryContext struct {
 	HighValueThresholdPaise int64               `json:"high_value_threshold_paise"`
 	AvailableBalancePaise   int64               `json:"available_balance_paise"`
 
-	// Resource constraint fields — used by eligibility engine to gate budget-dependent actions
-	AvailableBudgetPaise     int64 `json:"available_budget_paise"`
-	HumanDeskSlotsRemaining  int   `json:"human_desk_slots_remaining"`
+	// Resource constraint fields - used by eligibility engine to gate budget-dependent actions
+	AvailableBudgetPaise    int64 `json:"available_budget_paise"`
+	HumanDeskSlotsRemaining int   `json:"human_desk_slots_remaining"`
 }
 
 // CandidateEvaluation records the eligibility status and provenance for an action
@@ -134,14 +134,14 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 		}
 
 		// 2. INCENTIVE_DISCOUNT:
-		// GATE 1 — Eligibility (deterministic, per-case): Does discount mathematically close the solvency gap?
+		// GATE 1 - Eligibility (deterministic, per-case): Does discount mathematically close the solvency gap?
 		// Condition: available_balance < invoice_amount AND available_balance >= invoice_amount - min(0.05*amount, ₹500)
 		gapClosingEligible := true
 		if ctx.AvailableBalancePaise > 0 {
 			gapClosingEligible = ctx.AvailableBalancePaise < ctx.AmountPaise && ctx.AvailableBalancePaise >= (ctx.AmountPaise-discountCostPaise)
 		}
 
-		// GATE 2 — Budget (knapsack, portfolio-level): Does merchant concession pool have remaining capacity?
+		// GATE 2 - Budget (knapsack, portfolio-level): Does merchant concession pool have remaining capacity?
 		budgetCanAffordDiscount := ctx.AvailableBudgetPaise >= discountCostPaise && ctx.AvailableBudgetPaise > 0
 
 		// Both gates must pass!
@@ -220,11 +220,11 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 			Signals:       []string{"PTP parser active", "Customer re-engagement path open"},
 		})
 
-		// 5. ESCALATE_HUMAN: Slot-gated — only eligible if specialist desk has remaining capacity
+		// 5. ESCALATE_HUMAN: Slot-gated - only eligible if specialist desk has remaining capacity
 		escalateEligible := (ctx.AttemptsMade >= 2 || ctx.AmountPaise >= 1000000) && humanSlotsAvailable
 		escalateReason := "High attempt count or enterprise value threshold qualifies for manual concierge assist"
 		if !humanSlotsAvailable {
-			escalateReason = fmt.Sprintf("Specialist desk at capacity (0 slots remaining) — routed to zero-cost fallback")
+			escalateReason = fmt.Sprintf("Specialist desk at capacity (0 slots remaining) - routed to zero-cost fallback")
 		}
 		evaluations = append(evaluations, CandidateEvaluation{
 			Action:        ActionEscalateHuman,
@@ -246,17 +246,7 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 			Signals:       []string{"Instrument replacement link ready", "Multi-rail payment gateway supported"},
 		})
 
-		// 2. PROMISE_TO_PAY: Customer-initiated commitment to replace instrument by a specific date
-		evaluations = append(evaluations, CandidateEvaluation{
-			Action:        ActionPromiseToPay,
-			DisplayName:   "Promise to Pay (PTP)",
-			CandidateType: "RECOVERY",
-			Eligible:      true,
-			Reason:        "Customer can commit to updating payment details and settling by a specific date",
-			Signals:       []string{"Instrument update scheduling supported"},
-		})
-
-		// 3. ESCALATE_HUMAN: Safety / Fallback outcome
+		// 2. ESCALATE_HUMAN: Safety / Fallback outcome
 		evaluations = append(evaluations, CandidateEvaluation{
 			Action:        ActionEscalateHuman,
 			DisplayName:   "Escalate to Support Desk",
@@ -341,7 +331,6 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 			})
 		}
 
-
 		// 4. PROMISE_TO_PAY: Customer date commitment option
 		evaluations = append(evaluations, CandidateEvaluation{
 			Action:        ActionPromiseToPay,
@@ -356,7 +345,7 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 		escalateOtpEligible := ctx.AmountPaise >= 1000000 && humanSlotsAvailable
 		escalateOtpReason := "High-value cart abandonment concierge assistance"
 		if !humanSlotsAvailable {
-			escalateOtpReason = "Specialist desk at capacity — routed to zero-cost nudge fallback"
+			escalateOtpReason = "Specialist desk at capacity - routed to zero-cost nudge fallback"
 		}
 		evaluations = append(evaluations, CandidateEvaluation{
 			Action:        ActionEscalateHuman,
@@ -365,6 +354,46 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 			Eligible:      escalateOtpEligible,
 			Reason:        escalateOtpReason,
 			Signals:       []string{fmt.Sprintf("Amount: ₹%.2f", float64(ctx.AmountPaise)/100.0), fmt.Sprintf("Desk slots: %d remaining", ctx.HumanDeskSlotsRemaining)},
+		})
+
+	case diagnosis.CauseMandateLimit:
+		// 1. PRIMARY: SWITCH_TO_AVAILABLE_ALTERNATE_RAIL (One-Time UPI Collect/Intent)
+		// Mandate limit exceeded affects only THIS transaction (amount > per-debit cap).
+		// The mandate itself is still alive and will work fine next cycle at normal amount.
+		// One-Time UPI is same-day, zero bank round-trip, single-tap customer approval -> DOMINANT.
+		evaluations = append(evaluations, CandidateEvaluation{
+			Action:        ActionSwitchToAvailableAlternateRail,
+			DisplayName:   "Switch to One-Time Instant UPI",
+			CandidateType: "RECOVERY",
+			Eligible:      true,
+			Reason:        "Mandate limit exceeded affects only this transaction (amount > per-debit cap). Mandate remains alive for future cycles; One-Time UPI settles immediately without bank round-trip or touching mandate",
+			Signals:       []string{"Active recurring mandate preserved for future cycles", "Single-tap instant UPI settlement", "Zero recurring mandate friction", "Same-day NPCI settlement"},
+		})
+
+		// 2. SECONDARY / PARALLEL (NON-BLOCKING): REQUEST_MANDATE_LIMIT_INCREASE
+		// Only relevant if merchant expects future recurring charges above cap (e.g. tier upgrade).
+		// Requires customer re-authorization at bank/UPI app, takes days, NPCI throttles modification frequency.
+		// Never blocks current recovery attempt -> Logged as secondary async action, not critical path.
+		evaluations = append(evaluations, CandidateEvaluation{
+			Action:        ActionRequestMandateLimitIncrease,
+			DisplayName:   "Request Mandate Limit Increase (Async / Background)",
+			CandidateType: "ASYNC_SECONDARY",
+			Eligible:      false,
+			Reason:        "Secondary async action: Requires multi-day bank re-authorization and NPCI throttle limits; unblocked via instant UPI recovery on critical path",
+			Signals:       []string{"Multi-day bank approval required", "NPCI throttling applies", "Non-blocking background workflow"},
+		})
+
+		// 3. SAFETY FALLBACK: ESCALATE_HUMAN (Support Advisory)
+		// Skipped as a first-line option — not a recovery action, but an admission automation gave up.
+		// Reserved strictly as a fallback if UPI collect itself fails or is unavailable for that customer.
+		supportEligible := !hasUPI && ctx.OriginalRail == "UPI"
+		evaluations = append(evaluations, CandidateEvaluation{
+			Action:        ActionEscalateHuman,
+			DisplayName:   "Contact Support Advisory (Fallback Only)",
+			CandidateType: "SAFETY_FALLBACK",
+			Eligible:      supportEligible,
+			Reason:        "Automated instant recovery dominant; support advisory reserved strictly as fallback if UPI collection fails or is unavailable",
+			Signals:       []string{"Instant recovery dominant over manual support", "Zero customer friction prioritized"},
 		})
 
 	case diagnosis.CauseMandateRevoked:
@@ -388,17 +417,7 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 			Signals:       []string{"Invoice collection workflow active"},
 		})
 
-		// 3. PROMISE_TO_PAY: Customer date commitment option
-		evaluations = append(evaluations, CandidateEvaluation{
-			Action:        ActionPromiseToPay,
-			DisplayName:   "Promise to Pay (PTP)",
-			CandidateType: "RECOVERY",
-			Eligible:      true,
-			Reason:        "Customer can schedule replacement authorization on a future date",
-			Signals:       []string{"Deferred mandate recovery option"},
-		})
-
-		// 4. ESCALATE_HUMAN: Safety / Fallback outcome
+		// 3. ESCALATE_HUMAN: Safety / Fallback outcome
 		evaluations = append(evaluations, CandidateEvaluation{
 			Action:        ActionEscalateHuman,
 			DisplayName:   "Escalate to Account Manager",
@@ -406,6 +425,42 @@ func (e *EligibilityEngine) EvaluateEligibility(ctx RecoveryContext) []Candidate
 			Eligible:      ctx.AmountPaise >= 1000000,
 			Reason:        "Enterprise mandate cancellation requires dedicated account management",
 			Signals:       []string{fmt.Sprintf("Amount: ₹%.2f >= ₹10,000 threshold", float64(ctx.AmountPaise)/100.0)},
+		})
+
+	case diagnosis.CauseOverdueInvoice:
+		// 1. PROMISE_TO_PAY: Primary conversational recovery action for overdue B2B enterprise invoices
+		evaluations = append(evaluations, CandidateEvaluation{
+			Action:        ActionPromiseToPay,
+			DisplayName:   "Promise to Pay (PTP)",
+			CandidateType: "RECOVERY",
+			Eligible:      true,
+			Reason:        "Conversational Hinglish/NLP commitment workflow enabled for overdue enterprise invoice",
+			Signals:       []string{"B2B invoice overdue", "PTP parser active", "Customer re-engagement path open"},
+		})
+
+		// 2. COLLECT_OUTSTANDING_PAYMENT: Direct settlement link for outstanding enterprise invoice
+		evaluations = append(evaluations, CandidateEvaluation{
+			Action:        ActionCollectOutstandingPayment,
+			DisplayName:   "Collect Outstanding Invoice",
+			CandidateType: "RECOVERY",
+			Eligible:      true,
+			Reason:        "Send instant payment link for outstanding B2B enterprise invoice",
+			Signals:       []string{"Invoice collection workflow active", "Instant payment link generated"},
+		})
+
+		// 3. ESCALATE_HUMAN: Slot-gated safety / fallback outcome
+		escalateInvoiceEligible := (ctx.AttemptsMade >= 2 || ctx.AmountPaise >= 1000000) && humanSlotsAvailable
+		escalateInvoiceReason := "High-value overdue invoice concierge assistance"
+		if !humanSlotsAvailable {
+			escalateInvoiceReason = "Specialist desk at capacity - routed to conversational PTP recovery"
+		}
+		evaluations = append(evaluations, CandidateEvaluation{
+			Action:        ActionEscalateHuman,
+			DisplayName:   "Escalate to Finance / Account Manager",
+			CandidateType: "SAFETY_FALLBACK",
+			Eligible:      escalateInvoiceEligible,
+			Reason:        escalateInvoiceReason,
+			Signals:       []string{fmt.Sprintf("Amount: ₹%.2f", float64(ctx.AmountPaise)/100.0), fmt.Sprintf("Desk slots: %d remaining", ctx.HumanDeskSlotsRemaining)},
 		})
 
 	case diagnosis.CauseFraudSuspected:

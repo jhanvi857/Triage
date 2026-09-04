@@ -395,6 +395,22 @@ func computeContextualProbability(f CaseFeatures, action string) float64 {
 			return 0.15
 		}
 
+	case "MANDATE_LIMIT":
+		switch action {
+		case "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
+			// One-Time UPI is dominant: same-day, zero friction, mandate untouched for next cycle
+			return 0.89
+		case "REQUEST_MANDATE_LIMIT_INCREASE":
+			// Secondary async action: multi-day re-auth, lower immediate recovery rate
+			return 0.35
+		case "ESCALATE_HUMAN":
+			// Support advisory fallback
+			if f.AmountPaise >= 1500000 {
+				return 0.50
+			}
+			return 0.20
+		}
+
 	case "MANDATE_REVOKED":
 		switch action {
 		case "REAUTHORIZE_MANDATE":
@@ -424,6 +440,19 @@ func computeContextualProbability(f CaseFeatures, action string) float64 {
 		case "ESCALATE_HUMAN":
 			if f.AmountPaise >= 800000 {
 				return 0.75
+			}
+			return 0.30
+		}
+
+	case "OVERDUE_INVOICE":
+		switch action {
+		case "PROMISE_TO_PAY":
+			return math.Min(0.88, 0.82+0.08*(hist-0.5))
+		case "COLLECT_OUTSTANDING_PAYMENT", "CORPORATE_INVOICE":
+			return 0.72
+		case "ESCALATE_HUMAN":
+			if f.AmountPaise >= 1000000 {
+				return 0.60
 			}
 			return 0.30
 		}

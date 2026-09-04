@@ -31,10 +31,16 @@ func TestDiagnosis_AllFailureCauses(t *testing.T) {
 		t.Errorf("expected %s, got %s", CauseOtpDropoff, rep4.RootCause)
 	}
 
-	// 5. Mandate Revoked
-	rep5 := eng.DiagnoseStructured("CASE-05", "mandate_cancelled_at_bank", "bank", "payment_authorization", "Autopay revoked at destination bank", "NACH_MANDATE", 1200000)
-	if rep5.RootCause != CauseMandateRevoked {
-		t.Errorf("expected %s, got %s", CauseMandateRevoked, rep5.RootCause)
+	// 5. Mandate Limit Exceeded (single charge breaches per-debit cap)
+	rep5a := eng.DiagnoseStructured("CASE-05A", "mandate_max_amount_breached", "bank", "payment_initiation", "Auto-debit exceeds per-transaction limit", "NACH_MANDATE", 1800000)
+	if rep5a.RootCause != CauseMandateLimit || rep5a.RecommendedAction != "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL" {
+		t.Errorf("expected %s with action SWITCH_TO_AVAILABLE_ALTERNATE_RAIL, got %s / %s", CauseMandateLimit, rep5a.RootCause, rep5a.RecommendedAction)
+	}
+
+	// 5b. Mandate Revoked (authorization cancelled)
+	rep5b := eng.DiagnoseStructured("CASE-05B", "mandate_cancelled_at_bank", "bank", "payment_authorization", "Autopay revoked at destination bank", "NACH_MANDATE", 1200000)
+	if rep5b.RootCause != CauseMandateRevoked || rep5b.RecommendedAction != "REAUTHORIZE_MANDATE" {
+		t.Errorf("expected %s with action REAUTHORIZE_MANDATE, got %s / %s", CauseMandateRevoked, rep5b.RootCause, rep5b.RecommendedAction)
 	}
 
 	// 6. Fraud Suspected
@@ -49,9 +55,15 @@ func TestDiagnosis_AllFailureCauses(t *testing.T) {
 		t.Errorf("expected %s, got %s", CauseNetworkDecline, rep7.RootCause)
 	}
 
-	// 8. Unknown / Unrecognized -> Must route to human review (No guessing)
-	rep8 := eng.DiagnoseStructured("CASE-08", "weird_error_999", "internal", "custom", "Some unmapped bank response", "CARD", 100000)
-	if rep8.RootCause != CauseUnknown || !rep8.RequiresHumanReview {
-		t.Errorf("expected unknown error requiring human review, got %s (human_review=%v)", rep8.RootCause, rep8.RequiresHumanReview)
+	// 8. Overdue B2B Enterprise Invoice (Net-30)
+	rep8 := eng.DiagnoseStructured("CASE-08", "invoice_overdue", "corporate_billing", "invoice_due_date", "B2B enterprise invoice overdue past Net-30 payment terms", "BANK_TRANSFER", 1800000)
+	if rep8.RootCause != CauseOverdueInvoice || rep8.RecommendedAction != "PROMISE_TO_PAY" {
+		t.Errorf("expected %s with action PROMISE_TO_PAY, got %s / %s", CauseOverdueInvoice, rep8.RootCause, rep8.RecommendedAction)
+	}
+
+	// 9. Unknown / Unrecognized -> Must route to human review (No guessing)
+	rep9 := eng.DiagnoseStructured("CASE-09", "weird_error_999", "internal", "custom", "Some unmapped bank response", "CARD", 100000)
+	if rep9.RootCause != CauseUnknown || !rep9.RequiresHumanReview {
+		t.Errorf("expected unknown error requiring human review, got %s (human_review=%v)", rep9.RootCause, rep9.RequiresHumanReview)
 	}
 }

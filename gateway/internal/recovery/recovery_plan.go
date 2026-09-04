@@ -203,9 +203,26 @@ func buildStepsForCause(caseID, rootCause string, eligible []string, amountPaise
 		}
 		addStep(intervention.ActionEscalateHuman, 0, "CLOSE", "STOP")
 
+	case diagnosis.CauseMandateLimit:
+		// Primary: One-Time UPI instant recovery (mandate stays intact)
+		if isEligible(intervention.ActionSwitchToAvailableAlternateRail) {
+			addStep(intervention.ActionSwitchToAvailableAlternateRail, 0, "CLOSE", "NEXT")
+		}
+		// Fallback only if UPI fails
+		addStep(intervention.ActionEscalateHuman, 0, "CLOSE", "STOP")
+
 	case diagnosis.CauseMandateRevoked:
 		if isEligible(intervention.ActionReauthorizeMandate) {
 			addStep(intervention.ActionReauthorizeMandate, 0, "CLOSE", "NEXT")
+		}
+		if isEligible(intervention.ActionCollectOutstandingPayment) {
+			addStep(intervention.ActionCollectOutstandingPayment, 2*time.Hour, "CLOSE", "NEXT")
+		}
+		addStep(intervention.ActionEscalateHuman, 0, "CLOSE", "STOP")
+
+	case diagnosis.CauseOverdueInvoice:
+		if isEligible(intervention.ActionPromiseToPay) {
+			addStep(intervention.ActionPromiseToPay, 0, "CLOSE", "NEXT")
 		}
 		if isEligible(intervention.ActionCollectOutstandingPayment) {
 			addStep(intervention.ActionCollectOutstandingPayment, 2*time.Hour, "CLOSE", "NEXT")

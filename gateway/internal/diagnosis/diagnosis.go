@@ -6,13 +6,15 @@ import (
 	"time"
 )
 
-// Root failure causes (Deterministic 7-cause taxonomy + Unknown)
+// Root failure causes (Deterministic taxonomy + Unknown)
 const (
 	CauseInsufficientFunds = "INSUFFICIENT_FUNDS"
 	CauseBankDowntime      = "BANK_DOWNTIME_TIMEOUT"
 	CauseExpiredCard       = "EXPIRED_CARD"
 	CauseOtpDropoff        = "OTP_DROP_OFF"
 	CauseMandateRevoked    = "MANDATE_REVOKED"
+	CauseMandateLimit      = "MANDATE_LIMIT"
+	CauseOverdueInvoice    = "OVERDUE_INVOICE"
 	CauseNetworkDecline    = "NETWORK_DECLINE"
 	CauseFraudSuspected    = "FRAUD_SUSPECTED"
 	CauseUnknown           = "UNKNOWN_ERROR"
@@ -53,7 +55,54 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 	desc := strings.ToLower(strings.TrimSpace(description))
 	fullText := fmt.Sprintf("%s %s %s %s", reason, source, step, desc)
 
-	// 1. Expired Card (Hard decline on card validity date)
+	// 1. Max Attempts Exhausted (Stopping rule - Highest Priority Halt)
+	if reason == "attempts_exhausted" || strings.Contains(fullText, "attempts_exhausted") || strings.Contains(fullText, "max_attempts") {
+		return DiagnosticReport{
+			CaseID:              caseID,
+			RootCause:           CauseInsufficientFunds,
+			ConfidenceScore:     1.0,
+			TechnicalReason:     "Maximum 3 retry attempts reached. Automated recovery stopped.",
+			CustomerFacingMsg:   "Maximum 3 retry attempts reached. Automated recovery stopped to prevent customer fatigue.",
+			IsRecoverable:       false,
+			RequiresHumanReview: true,
+			RecommendedAction:   "MARK_LOST_EXHAUSTED",
+			DiagnosedAt:         now,
+		}
+	}
+
+	// 2. Fraud Suspected / Security Velocity Anomaly (Highest Priority Safety Gate)
+	if reason == "risk_threshold_exceeded" || reason == "fraud_velocity_risk" || source == "risk" ||
+		strings.Contains(fullText, "fraud") || strings.Contains(fullText, "stolen") ||
+		strings.Contains(fullText, "blacklisted") || strings.Contains(fullText, "velocity") {
+		return DiagnosticReport{
+			CaseID:              caseID,
+			RootCause:           CauseFraudSuspected,
+			ConfidenceScore:     1.0,
+			TechnicalReason:     "Security/velocity anomaly triggered. Immediate halt for risk review.",
+			CustomerFacingMsg:   "Security verification flag triggered. Automated retry halted by policy.",
+			IsRecoverable:       false,
+			RequiresHumanReview: true,
+			RecommendedAction:   "STOP",
+			DiagnosedAt:         now,
+		}
+	}
+
+	// 3. High-Value Gate Escalation (Enterprise transaction ceiling >= ₹10,000)
+	if reason == "high_value_review_required" || strings.Contains(fullText, "high_value") {
+		return DiagnosticReport{
+			CaseID:              caseID,
+			RootCause:           CauseBankDowntime,
+			ConfidenceScore:     1.0,
+			TechnicalReason:     "Transaction value exceeds ₹10,000 threshold. Escalated to Senior Retention Desk.",
+			CustomerFacingMsg:   "High-value enterprise transaction flagged for specialist review.",
+			IsRecoverable:       true,
+			RequiresHumanReview: true,
+			RecommendedAction:   "ESCALATE_HUMAN",
+			DiagnosedAt:         now,
+		}
+	}
+
+	// 4. Expired Card (Hard decline on card validity date)
 	if reason == "card_expired" || strings.Contains(fullText, "card_expired") ||
 		strings.Contains(fullText, "expired_card") || strings.Contains(fullText, "card expired") ||
 		strings.Contains(fullText, "invalid_card") {
@@ -107,18 +156,52 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 		}
 	}
 
-	// 4. Mandate Revoked / Subscription Authorization Cancelled / Limit Exceeded
+	// 5. Mandate Limit Exceeded (Single transaction breaches per-debit cap; mandate remains active)
+	if reason == "mandate_max_amount_breached" || reason == "mandate_limit" || reason == "mandate_limit_exceeded" ||
+		reason == "limit_exceeded" || strings.Contains(fullText, "mandate_limit") || strings.Contains(fullText, "limit_exceeded") ||
+		strings.Contains(fullText, "exceeds maximum") || strings.Contains(fullText, "limit exceeded") ||
+		strings.Contains(fullText, "mandate limit") || strings.Contains(fullText, "amount exceeded") {
+		return DiagnosticReport{
+			CaseID:              caseID,
+			RootCause:           CauseMandateLimit,
+			ConfidenceScore:     0.99,
+			TechnicalReason:     "Transaction amount exceeds per-debit e-mandate limit. Mandate remains active for standard recurring cycles.",
+			CustomerFacingMsg:   "Payment exceeds your per-debit autopay limit. Complete this cycle with instant one-time UPI.",
+			IsRecoverable:       true,
+			RequiresHumanReview: false,
+			RecommendedAction:   "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
+			DiagnosedAt:         now,
+		}
+	}
+
+	// 6. Overdue B2B Enterprise Invoice (Past due Net-30 terms)
+	if reason == "invoice_overdue" || reason == "overdue_invoice" || reason == "b2b_invoice_unpaid" ||
+		strings.Contains(fullText, "overdue_invoice") || strings.Contains(fullText, "invoice_overdue") ||
+		strings.Contains(fullText, "invoice overdue") || strings.Contains(fullText, "overdue invoice") ||
+		strings.Contains(fullText, "net-30") || strings.Contains(fullText, "unpaid invoice") {
+		return DiagnosticReport{
+			CaseID:              caseID,
+			RootCause:           CauseOverdueInvoice,
+			ConfidenceScore:     0.98,
+			TechnicalReason:     "B2B enterprise invoice payment past due date under Net-30 credit terms.",
+			CustomerFacingMsg:   "Your enterprise invoice is past due. Schedule a payment commitment or settle now.",
+			IsRecoverable:       true,
+			RequiresHumanReview: false,
+			RecommendedAction:   "PROMISE_TO_PAY",
+			DiagnosedAt:         now,
+		}
+	}
+
+	// 5. Mandate Revoked / Subscription Authorization Cancelled at Bank
 	if reason == "mandate_cancelled_at_bank" || reason == "mandate_revoked" ||
-		reason == "mandate_max_amount_breached" || reason == "mandate_limit" ||
-		strings.Contains(fullText, "mandate") || strings.Contains(fullText, "limit_exceeded") ||
-		strings.Contains(fullText, "auth_cancelled") || strings.Contains(fullText, "mandate_failed") ||
-		strings.Contains(fullText, "mandate cancelled") || strings.Contains(fullText, "auto-debit") ||
-		strings.Contains(fullText, "exceeds maximum") {
+		strings.Contains(fullText, "mandate") || strings.Contains(fullText, "auth_cancelled") ||
+		strings.Contains(fullText, "mandate_failed") || strings.Contains(fullText, "mandate cancelled") ||
+		strings.Contains(fullText, "mandate revoked") || strings.Contains(fullText, "auto-debit") {
 		return DiagnosticReport{
 			CaseID:              caseID,
 			RootCause:           CauseMandateRevoked,
 			ConfidenceScore:     0.99,
-			TechnicalReason:     "Recurring e-mandate limit breached or authorization revoked at destination bank.",
+			TechnicalReason:     "Recurring e-mandate authorization revoked or cancelled at destination bank.",
 			CustomerFacingMsg:   "Recurring autopay authorization was interrupted. Please re-authorize autopay mandate.",
 			IsRecoverable:       true,
 			RequiresHumanReview: false,
@@ -127,10 +210,28 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 		}
 	}
 
-	// 5. OTP / 3DS Drop-off (User abandoned challenge window)
-	if reason == "payment_cancelled_by_user" || step == "payment_authentication" ||
+	// 5. Fraud Suspected / Security Velocity Anomaly (Highest Priority Safety Gate)
+	if reason == "risk_threshold_exceeded" || reason == "fraud_velocity_risk" || source == "risk" ||
+		strings.Contains(fullText, "fraud") || strings.Contains(fullText, "stolen") ||
+		strings.Contains(fullText, "blacklisted") || strings.Contains(fullText, "velocity") {
+		return DiagnosticReport{
+			CaseID:              caseID,
+			RootCause:           CauseFraudSuspected,
+			ConfidenceScore:     1.0,
+			TechnicalReason:     "Security/velocity anomaly triggered. Immediate halt for risk review.",
+			CustomerFacingMsg:   "Security verification flag triggered. Automated retry halted by policy.",
+			IsRecoverable:       false,
+			RequiresHumanReview: true,
+			RecommendedAction:   "STOP",
+			DiagnosedAt:         now,
+		}
+	}
+
+	// 6. OTP / 3DS Drop-off (User abandoned challenge window)
+	if reason == "payment_cancelled_by_user" || reason == "otp_expired" ||
 		strings.Contains(fullText, "otp") || strings.Contains(fullText, "3ds_drop") ||
-		strings.Contains(fullText, "abandoned") || strings.Contains(fullText, "user_cancelled") {
+		strings.Contains(fullText, "3ds") || strings.Contains(fullText, "abandoned") ||
+		strings.Contains(fullText, "user_cancelled") {
 		return DiagnosticReport{
 			CaseID:              caseID,
 			RootCause:           CauseOtpDropoff,
@@ -140,23 +241,6 @@ func (e *Engine) DiagnoseStructured(caseID string, errorReason, errorSource, err
 			IsRecoverable:       true,
 			RequiresHumanReview: false,
 			RecommendedAction:   "RESUME_CHECKOUT",
-			DiagnosedAt:         now,
-		}
-	}
-
-	// 6. Fraud Suspected / Security Velocity Anomaly
-	if reason == "risk_threshold_exceeded" || source == "risk" ||
-		strings.Contains(fullText, "fraud") || strings.Contains(fullText, "stolen") ||
-		strings.Contains(fullText, "blacklisted") || strings.Contains(fullText, "velocity") {
-		return DiagnosticReport{
-			CaseID:              caseID,
-			RootCause:           CauseFraudSuspected,
-			ConfidenceScore:     0.92,
-			TechnicalReason:     "Security/velocity anomaly triggered. Immediate halt for risk review.",
-			CustomerFacingMsg:   "Security flag triggered. Escalated to risk review team.",
-			IsRecoverable:       false,
-			RequiresHumanReview: true,
-			RecommendedAction:   "ESCALATE_HUMAN",
 			DiagnosedAt:         now,
 		}
 	}
