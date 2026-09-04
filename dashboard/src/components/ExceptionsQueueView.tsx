@@ -18,7 +18,16 @@ export const ExceptionsQueueView: React.FC<ExceptionsQueueViewProps> = ({
   processingId,
 }) => {
   const exceptionCases = cases.filter(
-    (c) => c.status === "LOST" || c.status === "ESCALATED"
+    (c) =>
+      c.status === "LOST" ||
+      c.status === "ESCALATED" ||
+      c.attempts_made >= 3 ||
+      c.amount_inr >= 10000 ||
+      c.diagnosis?.root_cause === "FRAUD_SUSPECTED" ||
+      c.error_code.includes("FRAUD") ||
+      c.intervention?.action === "ESCALATE_HUMAN" ||
+      c.intervention?.action === "STOP" ||
+      c.intervention?.action === "MARK_LOST_EXHAUSTED"
   );
 
   const maxAttemptsCount = exceptionCases.filter((c) => c.attempts_made >= 3).length;

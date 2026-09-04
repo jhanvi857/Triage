@@ -50,6 +50,14 @@ const PRESET_CAUSES = [
     plan: "Pro Developer Monthly Seat",
   },
   {
+    code: "MANDATE_LIMIT",
+    name: "Mandate Limit Exceeded (₹15k Cap Breach)",
+    desc: "Single transaction exceeds per-debit cap. Mandate remains active — One-Time UPI dominant.",
+    rail: "NACH_MANDATE",
+    defaultAmount: 18500,
+    plan: "Dedicated AI Compute Tier (Monthly)",
+  },
+  {
     code: "MANDATE_REVOKED",
     name: "Mandate Revoked / Autopay Cancelled",
     desc: "Recurring autopay authorization revoked at destination bank",

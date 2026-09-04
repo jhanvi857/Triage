@@ -171,7 +171,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
             <span className="font-mono text-[12px] font-medium text-[#6F7777]">{caseItem.id}</span>
             {caseItem.source === "LIVE" ? (
               <span
-                title={caseItem.is_simulated ? "Live customer storefront event (Razorpay Sandbox mode — real customer interaction, safe test capture)" : "HMAC-verified live webhook from Razorpay API"}
+                title={caseItem.is_simulated ? "Live customer storefront event (Razorpay Sandbox mode - real customer interaction, safe test capture)" : "HMAC-verified live webhook from Razorpay API"}
                 className="px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border bg-[#EBF8F2] text-[#2F855A] border-[#C6F6D5] flex items-center gap-1"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-[#2F855A] animate-pulse"></span>
@@ -187,11 +187,10 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
             </span>
             {caseItem.intervention?.policy_verdict && (
               <span
-                className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded ${
-                  isVetoed
+                className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded ${isVetoed
                     ? "bg-[#C94A4A]/10 text-[#C94A4A] border border-[#C94A4A]/20"
                     : "bg-[#2E7D5B]/10 text-[#2E7D5B] border border-[#2E7D5B]/20"
-                }`}
+                  }`}
               >
                 POLICY: {caseItem.intervention.policy_verdict}
               </span>
@@ -207,10 +206,16 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
 
         <div className="text-left md:text-right border-t md:border-t-0 md:border-l border-[#E2E5E5] pt-3 md:pt-0 md:pl-6">
           <span className="text-[14px] font-semibold text-[#6F7777] block">
-            Revenue at Risk
+            {caseItem.status === "RECOVERED" ? "Recovered Revenue" : "Revenue at Risk"}
           </span>
           <div className="font-mono text-[26px] font-semibold text-[#202525] leading-tight mt-0.5">
-            ₹{caseItem.amount_inr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            {caseItem.status === "RECOVERED" && caseItem.recovered_amount_paise > 0 ? (
+              <span className="text-[#087F83]">
+                ₹{(caseItem.recovered_amount_paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </span>
+            ) : (
+              <span>₹{caseItem.amount_inr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            )}
           </div>
           {caseItem.incentive_discount_paise > 0 ? (() => {
             const totalPaise = caseItem.amount_paise || (caseItem.amount_inr * 100);
@@ -218,7 +223,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
             const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
             return (
               <div className="font-mono text-[11px] font-medium text-[#087F83] mt-1 bg-[#E6F4F1] px-2 py-0.5 rounded inline-block border border-[#B2DFDB]">
-                {pctStr} Concession Applied: -₹{(caseItem.incentive_discount_paise / 100).toFixed(2)} &bull; Net: ₹{((caseItem.amount_inr * 100 - caseItem.incentive_discount_paise) / 100).toFixed(2)}
+                {pctStr} Concession Applied: -₹{(caseItem.incentive_discount_paise / 100).toFixed(2)} &bull; Net Recovered: ₹{((caseItem.amount_inr * 100 - caseItem.incentive_discount_paise) / 100).toFixed(2)}
               </div>
             );
           })() : (
@@ -227,15 +232,15 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                 caseItem.available_balance_inr !== undefined &&
                 caseItem.available_balance_inr < caseItem.amount_inr &&
                 caseItem.available_balance_inr >= caseItem.amount_inr - Math.min(0.05 * caseItem.amount_inr, 500))) && (() => {
-              const discountINR = Math.min(0.05 * caseItem.amount_inr, 500);
-              const pct = caseItem.amount_inr > 0 ? (discountINR / caseItem.amount_inr) * 100 : 5;
-              const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
-              return (
-                <div className="font-mono text-[11px] font-medium text-[#087F83] mt-1 bg-[#E6F4F1] px-2 py-0.5 rounded inline-block border border-[#B2DFDB]">
-                  {pctStr} Gap-Closing Concession: -₹{discountINR.toFixed(2)} &bull; Net: ₹{(caseItem.amount_inr - discountINR).toFixed(2)}
-                </div>
-              );
-            })()
+                  const discountINR = Math.min(0.05 * caseItem.amount_inr, 500);
+                  const pct = caseItem.amount_inr > 0 ? (discountINR / caseItem.amount_inr) * 100 : 5;
+                  const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+                  return (
+                    <div className="font-mono text-[11px] font-medium text-[#087F83] mt-1 bg-[#E6F4F1] px-2 py-0.5 rounded inline-block border border-[#B2DFDB]">
+                      {pctStr} Gap-Closing Concession: -₹{discountINR.toFixed(2)} &bull; Net: ₹{(caseItem.amount_inr - discountINR).toFixed(2)}
+                    </div>
+                  );
+                })()
           )}
           <span className="font-mono text-[12px] font-normal text-[#6F7777] block mt-0.5">
             Rail: <strong className="font-medium text-[#202525]">{caseItem.original_rail}</strong> &bull; Attempt {caseItem.attempts_made}/{caseItem.max_attempts}
@@ -376,7 +381,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                           ))}
                         </div>
                       ) : (
-                        <span className="text-[#9E9E9E]">—</span>
+                        <span className="text-[#9E9E9E]">-</span>
                       )}
                     </td>
                   </tr>
@@ -422,12 +427,12 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
             {(caseItem.intervention?.ml_rankings && caseItem.intervention.ml_rankings.length > 0
               ? caseItem.intervention.ml_rankings
               : (caseItem.diagnosis?.root_cause === "INSUFFICIENT_FUNDS" || caseItem.error_code === "INSUFFICIENT_FUNDS")
-              ? [
+                ? [
                   { action: "RETRY_NEXT_PAYDAY_WINDOW", probability_percent: 86.0, expected_value_inr: Math.round(caseItem.amount_inr * 0.86), reasoning: "Customer payday/salary cycle is in 1 day; high probability of automatic settlement" },
                   { action: "PROMISE_TO_PAY", probability_percent: 48.0, expected_value_inr: Math.round(caseItem.amount_inr * 0.48), reasoning: "Conversational customer commitment" },
                   { action: "ESCALATE_HUMAN", probability_percent: 20.0, expected_value_inr: Math.round(caseItem.amount_inr * 0.20), reasoning: "Manual support outreach" },
                 ]
-              : [
+                : [
                   { action: "SWITCH_TO_SAVED_CARD", probability_percent: 86.5, expected_value_inr: Math.round(caseItem.amount_inr * 0.865), reasoning: "Active alternate Visa card with 4 prior successes" },
                   { action: "RETRY_NEXT_PAYDAY_WINDOW", probability_percent: 38.2, expected_value_inr: Math.round(caseItem.amount_inr * 0.382), reasoning: "Payday is 18 days away; low immediate probability" },
                   { action: "PROMISE_TO_PAY", probability_percent: 54.0, expected_value_inr: Math.round(caseItem.amount_inr * 0.54), reasoning: "Customer commitment engagement" },
@@ -438,9 +443,8 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
               return (
                 <div
                   key={idx}
-                  className={`flex items-center justify-between py-2.5 px-3 rounded transition-colors ${
-                    isSelected ? "bg-[#087F83]/10 text-[#202525]" : "text-[#6F7777] hover:bg-[#F5F6F6]"
-                  }`}
+                  className={`flex items-center justify-between py-2.5 px-3 rounded transition-colors ${isSelected ? "bg-[#087F83]/10 text-[#202525]" : "text-[#6F7777] hover:bg-[#F5F6F6]"
+                    }`}
                 >
                   <div className="flex items-center space-x-2">
                     {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#087F83]" />}
@@ -553,11 +557,10 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
 
         {/* Verdict Banner */}
         <div
-          className={`p-4 rounded-lg border flex items-center justify-between ${
-            isVetoed
+          className={`p-4 rounded-lg border flex items-center justify-between ${isVetoed
               ? "bg-[#C94A4A]/10 border-[#C94A4A]/30 text-[#C94A4A]"
               : "bg-[#2E7D5B]/10 border-[#2E7D5B]/20 text-[#2E7D5B]"
-          }`}
+            }`}
         >
           <div>
             <div className="font-semibold text-[14px] tracking-wide uppercase">
@@ -770,13 +773,12 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
         {/* PTP Result Output with Strict Accounting */}
         {ptpResult && (
           <div
-            className={`p-4 rounded-md border text-[13px] space-y-3 ${
-              ptpResult.promise_detected
+            className={`p-4 rounded-md border text-[13px] space-y-3 ${ptpResult.promise_detected
                 ? "bg-[#EBF8FF] border-[#BEE3F8] text-[#2B6CB0]"
                 : ptpResult.needs_human_review
-                ? "bg-[#FFFAF0] border-[#FEEBC8] text-[#C05621]"
-                : "bg-[#F5F6F6] border-[#E2E5E5] text-[#6F7777]"
-            }`}
+                  ? "bg-[#FFFAF0] border-[#FEEBC8] text-[#C05621]"
+                  : "bg-[#F5F6F6] border-[#E2E5E5] text-[#6F7777]"
+              }`}
           >
             <div className="flex items-center justify-between">
               <span className="font-semibold uppercase tracking-wide text-[11px] flex items-center gap-1.5">
@@ -896,7 +898,9 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
               <tr className={caseItem.status === "RECOVERED" ? "bg-[#F0FFF4] font-bold" : "bg-[#F0FFF4]/40"}>
                 <td className="p-2.5 text-[#276749] font-bold">&#10004; Payment captured / settled on-rail</td>
                 <td className="p-2.5 text-[#276749]">Settlement</td>
-                <td className="p-2.5 text-right text-[#276749] font-bold text-[13px]">+₹{caseItem.amount_inr.toFixed(2)}</td>
+                <td className="p-2.5 text-right text-[#276749] font-bold text-[13px]">
+                  +₹{(caseItem.recovered_amount_paise > 0 ? caseItem.recovered_amount_paise / 100 : caseItem.amount_inr).toFixed(2)}
+                </td>
                 <td className="p-2.5 text-center"><span className="text-[10px] px-2 py-0.5 rounded bg-[#2E7D5B] text-white font-bold">RECOVERED</span></td>
               </tr>
               <tr>

@@ -26,8 +26,10 @@ export const RevenueAtRiskBreakdown: React.FC<RevenueAtRiskBreakdownProps> = ({
         name = "Expired Card";
       } else if (root.includes("TRANSACTION_TIMEOUT") || root.includes("OTP") || root.includes("3DS") || root.includes("DROP_OFF")) {
         name = "Checkout Drop-off";
+      } else if (root.includes("MANDATE_LIMIT") || root.includes("LIMIT")) {
+        name = "Mandate Limit Exceeded";
       } else if (root.includes("MANDATE_REVOKED") || root.includes("MANDATE")) {
-        name = "Failed Subscription";
+        name = "Mandate Revoked";
       } else if (root.includes("INVOICE") || root.includes("RECEIVABLE")) {
         name = "B2B Overdue Invoice";
       }
@@ -38,7 +40,8 @@ export const RevenueAtRiskBreakdown: React.FC<RevenueAtRiskBreakdownProps> = ({
       "Insufficient Funds": "bg-[#087F83]",
       "Expired Card": "bg-[#506361]",
       "Bank Downtime": "bg-[#B7791F]",
-      "Failed Subscription": "bg-[#C94A4A]",
+      "Mandate Limit Exceeded": "bg-[#4FD1C5]",
+      "Mandate Revoked": "bg-[#C94A4A]",
       "Checkout Drop-off": "bg-[#80CBC4]",
       "B2B Overdue Invoice": "bg-[#3182CE]",
       "Other Decline": "bg-[#6F7777]",

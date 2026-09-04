@@ -225,7 +225,16 @@ export default function RevenueControlPage() {
   }, [filteredCases]);
 
   const exceptionCases = cases.filter(
-    (c) => c.status === "LOST" || c.status === "ESCALATED"
+    (c) =>
+      c.status === "LOST" ||
+      c.status === "ESCALATED" ||
+      c.attempts_made >= 3 ||
+      c.amount_inr >= 10000 ||
+      c.diagnosis?.root_cause === "FRAUD_SUSPECTED" ||
+      c.error_code.includes("FRAUD") ||
+      c.intervention?.action === "ESCALATE_HUMAN" ||
+      c.intervention?.action === "STOP" ||
+      c.intervention?.action === "MARK_LOST_EXHAUSTED"
   );
 
   return (
@@ -292,8 +301,8 @@ export default function RevenueControlPage() {
                             </span>
                           </div>
                           <p className="text-[12px] text-[#6F7777] mt-1.5 leading-relaxed">
-                            This live console listens exclusively for real customer checkouts from the <strong>Storefront (`localhost:5173`)</strong>. 
-                            Events trigger genuine webhook dispatches and are tagged as <code className="text-[#2F855A] font-bold">LIVE · SANDBOX</code> (Razorpay test-mode capture — real browser interaction, test-mode payment capture).
+                            This live console listens exclusively for real customer checkouts from the <strong>Storefront (`localhost:5173`)</strong>.
+                            Events trigger genuine webhook dispatches and are tagged as <code className="text-[#2F855A] font-bold">LIVE · SANDBOX</code> (Razorpay test-mode capture - real browser interaction, test-mode payment capture).
                           </p>
                         </div>
 

@@ -116,7 +116,7 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
       if (c.is_simulated) {
         return (
           <span
-            title="Real live checkout from customer storefront (Razorpay Sandbox mode — safe test-mode capture, real customer workflow)"
+            title="Real live checkout from customer storefront (Razorpay Sandbox mode - safe test-mode capture, real customer workflow)"
             className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-[#EBF8F2] text-[#2F855A] border border-[#C6F6D5] whitespace-nowrap"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#2F855A] animate-pulse" />
@@ -148,7 +148,8 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
     if (root.includes("INSUFFICIENT_FUNDS") || root.includes("FUNDS")) return "Insufficient Funds";
     if (root.includes("EXPIRED_CARD") || root.includes("EXPIRED")) return "Expired Card";
     if (root.includes("OTP_DROP_OFF") || root.includes("3DS")) return "OTP Drop-off";
-    if (root.includes("MANDATE_REVOKED") || root.includes("MANDATE")) return "Mandate Limit / Revoked";
+    if (root.includes("MANDATE_LIMIT") || root.includes("LIMIT")) return "Mandate Limit Exceeded";
+    if (root.includes("MANDATE_REVOKED") || root.includes("MANDATE")) return "Mandate Revoked";
     if (root.includes("FRAUD")) return "Fraud Suspected";
     if (root.includes("NETWORK")) return "Network Decline";
     return root;
@@ -159,10 +160,11 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
       const act = c.intervention.action;
       if (act === "SWITCH_TO_SAVED_CARD") return "Backup Card";
       if (act === "RETRY_NEXT_PAYDAY_WINDOW") return "Payday Retry";
-      if (act === "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL") return "Switch Rail";
+      if (act === "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL") return "One-Time UPI";
       if (act === "UPDATE_PAYMENT_METHOD") return "Update Method";
       if (act === "RESUME_CHECKOUT") return "Resume Checkout";
       if (act === "REAUTHORIZE_MANDATE") return "Reauth Mandate";
+      if (act === "REQUEST_MANDATE_LIMIT_INCREASE") return "Limit Increase (Async)";
       if (act === "COLLECT_OUTSTANDING_PAYMENT") return "Collect Invoice";
       if (act === "PROMISE_TO_PAY") return "Promise to Pay";
       if (act === "RETRY_SAME_RAIL_COOLDOWN" || act === "RETRY_LATER") return "Cooldown Retry";
@@ -214,7 +216,7 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
             Listening for Live Storefront Checkouts...
           </h3>
           <p className="text-[13px] text-[#6F7777] max-w-lg mx-auto leading-relaxed">
-            No live customer payment declines have occurred yet in this session. 
+            No live customer payment declines have occurred yet in this session.
             Initiate a checkout on the <strong>Storefront (Left Screen)</strong> to watch the live webhook stream into this queue in real-time.
           </p>
         </div>
@@ -266,27 +268,40 @@ export const RecoveryQueueTable: React.FC<RecoveryQueueTableProps> = ({
 
                       {/* Amount */}
                       <td className="py-3 px-4 text-right font-mono text-[13px] text-[#202525] whitespace-nowrap">
-                        <div className="font-bold">
-                          ₹{c.amount_inr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                        </div>
-                        {c.incentive_discount_paise > 0 ? (
-                          <div className="text-[10px] text-[#087F83] font-semibold">
-                            -₹{(c.incentive_discount_paise / 100).toFixed(0)} &bull; Net ₹{((c.amount_inr * 100 - c.incentive_discount_paise) / 100).toFixed(0)}
-                          </div>
-                        ) : (c.intervention?.action === "INCENTIVE_DISCOUNT" ||
-                          ((c.diagnosis?.root_cause === "INSUFFICIENT_FUNDS" || c.error_code === "INSUFFICIENT_FUNDS") &&
-                            c.available_balance_inr !== undefined &&
-                            c.available_balance_inr < c.amount_inr &&
-                            c.available_balance_inr >= c.amount_inr - Math.min(0.05 * c.amount_inr, 500))) ? (() => {
-                          const discINR = Math.min(0.05 * c.amount_inr, 500);
-                          const pct = c.amount_inr > 0 ? (discINR / c.amount_inr) * 100 : 5;
-                          const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
-                          return (
-                            <div className="text-[10px] text-[#087F83] font-semibold">
-                              Net ₹{(c.amount_inr - discINR).toFixed(0)} ({pctStr} off)
+                        {c.status === "RECOVERED" && c.recovered_amount_paise > 0 && c.recovered_amount_paise < (c.amount_paise || c.amount_inr * 100) ? (
+                          <>
+                            <div className="font-bold text-[#087F83]">
+                              ₹{(c.recovered_amount_paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                             </div>
-                          );
-                        })() : null}
+                            <div className="text-[10px] text-[#6F7777] font-medium">
+                              <span className="line-through">₹{c.amount_inr.toFixed(0)}</span> (-₹{(c.incentive_discount_paise / 100).toFixed(0)} discount)
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-bold">
+                              ₹{c.amount_inr.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </div>
+                            {c.incentive_discount_paise > 0 ? (
+                              <div className="text-[10px] text-[#087F83] font-semibold">
+                                -₹{(c.incentive_discount_paise / 100).toFixed(0)} &bull; Net ₹{((c.amount_inr * 100 - c.incentive_discount_paise) / 100).toFixed(0)}
+                              </div>
+                            ) : (c.intervention?.action === "INCENTIVE_DISCOUNT" ||
+                              ((c.diagnosis?.root_cause === "INSUFFICIENT_FUNDS" || c.error_code === "INSUFFICIENT_FUNDS") &&
+                                c.available_balance_inr !== undefined &&
+                                c.available_balance_inr < c.amount_inr &&
+                                c.available_balance_inr >= c.amount_inr - Math.min(0.05 * c.amount_inr, 500))) ? (() => {
+                                  const discINR = Math.min(0.05 * c.amount_inr, 500);
+                                  const pct = c.amount_inr > 0 ? (discINR / c.amount_inr) * 100 : 5;
+                                  const pctStr = pct % 1 === 0 ? `${pct.toFixed(0)}%` : `${pct.toFixed(1)}%`;
+                                  return (
+                                    <div className="text-[10px] text-[#087F83] font-semibold">
+                                      Net ₹{(c.amount_inr - discINR).toFixed(0)} ({pctStr} off)
+                                    </div>
+                                  );
+                                })() : null}
+                          </>
+                        )}
                       </td>
 
                       {/* Customer / Plan */}

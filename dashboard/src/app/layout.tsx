@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Triage — Payment Failure & Revenue Recovery Dispatch Board",
+  title: "Triage - Payment Failure & Revenue Recovery Dispatch Board",
   description: "Autonomous payment failure root-cause diagnosis, bounded interventions, stopping rules, and immutable revenue recovery ledger.",
   keywords: ["Triage", "Revenue Recovery", "Payment Failures", "Razorpay", "Smart Retries", "Interventions", "Dispatch Board"],
 };
