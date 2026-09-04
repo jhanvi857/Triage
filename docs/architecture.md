@@ -1,4 +1,4 @@
-# Triage — Seven-Stage Autonomous Revenue Recovery Architecture
+# Triage - Seven-Stage Autonomous Revenue Recovery Architecture
 
 > **"Context determines what is possible. ML determines what is preferable. Deterministic policy determines what is permissible. The executor determines what actually happens. Every outcome feeds the recovery ledger and future decisioning."**
 
@@ -129,7 +129,7 @@ $$\text{PriorityScore} = \text{NetExpectedRecovery} \times \text{TimeSensitivity
 
 ## 3B. Outcome-Driven Offline Learning Pipeline with Gated Model Promotion
 
-Triage adheres to strict financial ML engineering standards — **zero unvetted online self-modifying models in production**:
+Triage adheres to strict financial ML engineering standards - **zero unvetted online self-modifying models in production**:
 
 ```text
 Decision (ML Recommendation)

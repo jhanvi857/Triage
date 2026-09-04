@@ -2,7 +2,7 @@
 
 ## 0. Introduction & Architectural Hook (30 Seconds)
 
-> *"Good afternoon. We are presenting **Triage** — an autonomous AI revenue recovery engine for failed subscription and invoice payments.*
+> *"Good afternoon. We are presenting **Triage** - an autonomous AI revenue recovery engine for failed subscription and invoice payments.*
 >
 > *Our core architectural principle is:*
 > **ML ranks bounded recovery choices. Deterministic code diagnoses, authorizes, limits, executes, and audits.**
@@ -32,7 +32,7 @@ python agent/run_scenarios.py --scenario 1
 
 ---
 
-## 2. Scenario 2: Context Matters — ML Shifts Strategy (60 Seconds)
+## 2. Scenario 2: Context Matters - ML Shifts Strategy (60 Seconds)
 
 **Command**:
 ```bash
@@ -50,7 +50,7 @@ python agent/run_scenarios.py --scenario 2
 
 ---
 
-## 3. Scenario 3: Stopping Rule Veto — "AI Recommends. Policy Controls." (60 Seconds)
+## 3. Scenario 3: Stopping Rule Veto - "AI Recommends. Policy Controls." (60 Seconds)
 
 **Command**:
 ```bash
