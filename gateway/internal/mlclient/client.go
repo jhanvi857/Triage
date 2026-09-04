@@ -71,7 +71,7 @@ type RankResponse struct {
 	ShadowBandit      *ShadowBanditReport `json:"shadow_bandit,omitempty"`
 	ModelType         string              `json:"model_type"`
 	EvaluatedAt       string              `json:"evaluated_at"`
-	Source            string              `json:"source"` // "ML_SERVICE" or "EMBEDDED_FALLBACK"
+	Source            string              `json:"source"` // "ML_SERVICE" or "EMBEDDED_HEURISTIC_FALLBACK"
 }
 
 // MLMetrics contains held-out test evaluation metrics
@@ -177,8 +177,8 @@ func (c *Client) RankCandidates(features CaseFeatures) RankResponse {
 			Cause:            features.Cause,
 			AmountPaise:      features.AmountPaise,
 			RankedCandidates: nil,
-			ModelType:        "RandomForestClassifier",
-			Source:           "EMBEDDED_FALLBACK",
+			ModelType:        "RandomForestClassifier (Embedded Go)",
+			Source:           "EMBEDDED_MODEL",
 			EvaluatedAt:      time.Now().UTC().Format(time.RFC3339),
 		}
 	}
@@ -201,23 +201,35 @@ func (c *Client) RankCandidates(features CaseFeatures) RankResponse {
 		}
 	}
 
-	// Fallback to embedded tabular decision logic if Python ML service is offline
+	// Evaluate pure Go embedded Random Forest (or heuristic fallback if model weights missing)
 	return c.EmbeddedRank(features)
 }
 
-// EmbeddedRank computes deterministic Random Forest-calibrated scores internally
+// EmbeddedRank computes inference directly inside Go using the embedded 100-tree Random Forest (<1ms)
 func (c *Client) EmbeddedRank(f CaseFeatures) RankResponse {
 	var ranked []RankedCandidate
 
+	rf := GetEmbeddedRandomForest()
+	hasTrees := rf != nil && len(rf.Trees) > 0
+
 	for _, act := range f.CandidateActions {
-		p := computeContextualProbability(f, act)
+		var p float64
+		if hasTrees {
+			p = rf.PredictProba(f, act)
+		} else {
+			p = computeContextualProbability(f, act)
+		}
+
 		discPaise := int64(0)
 		if act == "INCENTIVE_DISCOUNT" {
 			discPaise = int64(math.Min(float64(f.AmountPaise)*0.05, 50000.0))
 		}
 		ev := int64(p * float64(f.AmountPaise-discPaise))
 
-		reasoning := fmt.Sprintf("Predicted %.1f%% recovery probability based on contextual history & timing (EV: ₹%.2f)", p*100.0, float64(ev)/100.0)
+		reasoning := fmt.Sprintf("Embedded Random Forest (100 trees) predicted %.1f%% recovery probability (EV: ₹%.2f)", p*100.0, float64(ev)/100.0)
+		if !hasTrees {
+			reasoning = fmt.Sprintf("Calibrated fallback estimated %.1f%% recovery probability (EV: ₹%.2f)", p*100.0, float64(ev)/100.0)
+		}
 		if act == "ESCALATE_HUMAN" {
 			reasoning = "Manual retention/risk specialist triage"
 		} else if act == "STOP" {
@@ -260,6 +272,13 @@ func (c *Client) EmbeddedRank(f CaseFeatures) RankResponse {
 		}
 	}
 
+	modelType := "RandomForestClassifier (Embedded Go)"
+	source := "EMBEDDED_MODEL"
+	if !hasTrees {
+		modelType = "DeterministicHeuristicFallback"
+		source = "EMBEDDED_HEURISTIC_FALLBACK"
+	}
+
 	return RankResponse{
 		CaseID:            f.CaseID,
 		Cause:             f.Cause,
@@ -267,13 +286,13 @@ func (c *Client) EmbeddedRank(f CaseFeatures) RankResponse {
 		RankedCandidates:  ranked,
 		SelectedCandidate: selected,
 		ShadowBandit:      banditReport,
-		ModelType:         "RandomForestClassifier (Embedded)",
-		Source:            "EMBEDDED_FALLBACK",
+		ModelType:         modelType,
+		Source:            source,
 		EvaluatedAt:       time.Now().UTC().Format(time.RFC3339),
 	}
 }
 
-// computeContextualProbability replicates the exact contextual interactions of the ML model
+// computeContextualProbability evaluates calibrated heuristic fallback rules when ml-service is offline
 func computeContextualProbability(f CaseFeatures, action string) float64 {
 	attempt := f.AttemptNumber
 	if attempt <= 0 {

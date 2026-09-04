@@ -52,8 +52,10 @@ ACTIONS_BY_CAUSE = {
     ],
     "INSUFFICIENT_FUNDS": [
         "SWITCH_TO_SAVED_CARD",
+        "INCENTIVE_DISCOUNT",
         "RETRY_NEXT_PAYDAY_WINDOW",
         "PROMISE_TO_PAY",
+        "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
         "ESCALATE_HUMAN",
     ],
     "EXPIRED_CARD": [
@@ -129,11 +131,15 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
         elif action == "PROMISE_TO_PAY":
             if payday_prox >= 6:
                 return min(0.82, 0.74 + 0.10 * (hist_rate - 0.5))
-            return 0.48
+            elif payday_prox <= 2:
+                return 0.20
+            return 0.35
         elif action == "INCENTIVE_DISCOUNT":
             if payday_prox >= 6 and amount <= 600000:
                 return min(0.80, 0.65 + 0.10 * (hist_rate - 0.5))
             return 0.40
+        elif action == "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
+            return 0.22
         elif action == "ESCALATE_HUMAN":
             if amount >= 1000000 or attempt >= 2:
                 return 0.65
@@ -380,11 +386,11 @@ def train_and_evaluate():
     print(f"\n[3/5] Training Tabular RandomForestClassifier...")
     pipeline = Pipeline([
         ("vectorizer", DictVectorizer(sparse=False)),
-        ("rf", RandomForestClassifier(
+        ("clf", RandomForestClassifier(
             n_estimators=100,
-            max_depth=8,
-            min_samples_split=6,
-            min_samples_leaf=3,
+            max_depth=12,
+            min_samples_split=4,
+            min_samples_leaf=2,
             random_state=42,
             n_jobs=1
         ))
@@ -511,8 +517,49 @@ def train_and_evaluate():
         json.dump(metrics_data, f, indent=2)
     print(f"[OK] Saved evaluation metrics to {metrics_path}")
 
+    # Export pure Go embedded Random Forest tree structure
+    go_rf_path = os.path.join("gateway", "internal", "mlclient", "rf_model.json")
+    export_rf_for_go(pipeline, go_rf_path)
+
     return metrics_data
+
+
+def export_rf_for_go(pipeline, output_path: str):
+    """Exports trained scikit-learn RandomForestClassifier to JSON for pure Go embedded inference."""
+    try:
+        vec = pipeline.named_steps["vectorizer"]
+        clf = pipeline.named_steps.get("clf") or pipeline.named_steps.get("rf")
+        if clf is None:
+            return
+        feature_names = list(vec.get_feature_names_out())
+        trees = []
+        for dt in clf.estimators_:
+            t = dt.tree_
+            values = []
+            for val in t.value:
+                total = val[0][0] + val[0][1]
+                p1 = val[0][1] / total if total > 0 else 0.0
+                values.append(round(float(p1), 5))
+            trees.append({
+                "left": t.children_left.tolist(),
+                "right": t.children_right.tolist(),
+                "feature": t.feature.tolist(),
+                "threshold": [round(float(th), 5) for th in t.threshold],
+                "value": values,
+            })
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "feature_names": feature_names,
+                "n_classes": 2,
+                "n_estimators": len(trees),
+                "trees": trees,
+            }, f)
+        print(f"[OK] Exported pure Go embedded Random Forest model ({len(trees)} trees, {len(feature_names)} features) to {output_path}")
+    except Exception as e:
+        print(f"[WARN] Failed to export Go embedded RF model: {e}")
 
 
 if __name__ == "__main__":
     train_and_evaluate()
+

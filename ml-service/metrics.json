@@ -1,26 +1,19 @@
 {
-  "model_type": "RandomForest (Random Forest Classifier)",
-  "n_estimators": 100,
+  "model_type": "RandomForestClassifier",
+  "n_estimators": 120,
   "test_cases_evaluated": 750,
-  "total_revenue_at_risk_inr": 4346400.0,
-  "baseline_recovered_inr": 2665700.0,
-  "ml_recovered_inr": 2962000.0,
-  "baseline_revenue_recovery_rate_pct": 61.33,
-  "baseline_case_recovery_rate_pct": 62.8,
-  "baseline_recovery_rate_pct": 61.33,
-  "ml_revenue_recovery_rate_pct": 68.15,
-  "ml_case_recovery_rate_pct": 68.4,
-  "ml_recovery_rate_pct": 68.15,
-  "absolute_revenue_uplift_pct_points": 6.82,
-  "absolute_case_uplift_pct_points": 5.6,
-  "absolute_uplift_pct_points": 6.82,
-  "relative_uplift_pct": 11.12,
-  "roc_auc": 0.7819,
-  "precision": 0.6788,
-  "recall": 0.8478,
-  "f1_score": 0.7539,
-  "accuracy": 0.7192,
-  "p99_latency_ms": 5.833,
+  "total_revenue_at_risk_inr": 5391600.0,
+  "baseline_recovered_inr": 3665600.0,
+  "ml_recovered_inr": 3891300.0,
+  "baseline_recovery_rate_pct": 63.73,
+  "ml_recovery_rate_pct": 68.8,
+  "absolute_uplift_pct_points": 5.07,
+  "relative_uplift_pct": 6.16,
+  "roc_auc": 0.7745,
+  "precision": 0.7,
+  "recall": 0.7135,
+  "f1_score": 0.7067,
+  "accuracy": 0.7196,
   "actions_by_cause": {
     "BANK_DOWNTIME_TIMEOUT": [
       "RETRY_SAME_RAIL_COOLDOWN",
@@ -29,8 +22,10 @@
     ],
     "INSUFFICIENT_FUNDS": [
       "SWITCH_TO_SAVED_CARD",
+      "INCENTIVE_DISCOUNT",
       "RETRY_NEXT_PAYDAY_WINDOW",
       "PROMISE_TO_PAY",
+      "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
       "ESCALATE_HUMAN"
     ],
     "EXPIRED_CARD": [
@@ -40,6 +35,11 @@
     "OTP_DROP_OFF": [
       "RESUME_CHECKOUT",
       "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
+      "ESCALATE_HUMAN"
+    ],
+    "MANDATE_LIMIT": [
+      "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
+      "REQUEST_MANDATE_LIMIT_INCREASE",
       "ESCALATE_HUMAN"
     ],
     "MANDATE_REVOKED": [
@@ -62,15 +62,14 @@
     ]
   },
   "action_selection_counts_ml": {
-    "SWITCH_TO_SAVED_CARD": 210,
-    "UPDATE_PAYMENT_METHOD": 103,
-    "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL": 293,
-    "REAUTHORIZE_MANDATE": 36,
-    "COLLECT_OUTSTANDING_PAYMENT": 20,
-    "ESCALATE_HUMAN": 67,
-    "RETRY_SAME_RAIL_COOLDOWN": 10,
-    "RESUME_CHECKOUT": 8,
-    "PROMISE_TO_PAY": 2,
-    "RETRY_NEXT_PAYDAY_WINDOW": 1
+    "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL": 272,
+    "ESCALATE_HUMAN": 96,
+    "SWITCH_TO_SAVED_CARD": 160,
+    "UPDATE_PAYMENT_METHOD": 127,
+    "RETRY_SAME_RAIL_COOLDOWN": 26,
+    "RESUME_CHECKOUT": 28,
+    "COLLECT_OUTSTANDING_PAYMENT": 16,
+    "REAUTHORIZE_MANDATE": 23,
+    "RETRY_NEXT_PAYDAY_WINDOW": 2
   }
 }
