@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Triage ML Benchmark Suite — 3-Model + Baseline Comparative Evaluation
+Triage ML Benchmark Suite - 3-Model + Baseline Comparative Evaluation
 Compares Random Forest, XGBoost, LightGBM, and Logistic Regression on identical held-out test partitions.
 Evaluates:
   1. Classification Quality: ROC-AUC, Precision, Recall, F1, Accuracy, Log Loss

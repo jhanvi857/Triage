@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Triage ML Ranking Service — HTTP Inference & Telemetry Server
+Triage ML Ranking Service - HTTP Inference & Telemetry Server
 Exposes:
   - Random Forest / XGBoost / LightGBM Ranking & Scoring Engine
   - Multi-Model Offline Benchmark (/benchmark)
@@ -211,6 +211,7 @@ def rank_candidates():
             "INSUFFICIENT_FUNDS": ["SWITCH_TO_SAVED_CARD", "RETRY_NEXT_PAYDAY_WINDOW", "PROMISE_TO_PAY", "ESCALATE_HUMAN"],
             "EXPIRED_CARD": ["UPDATE_PAYMENT_METHOD", "ESCALATE_HUMAN"],
             "OTP_DROP_OFF": ["RESUME_CHECKOUT", "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL", "ESCALATE_HUMAN"],
+            "MANDATE_LIMIT": ["SWITCH_TO_AVAILABLE_ALTERNATE_RAIL", "REQUEST_MANDATE_LIMIT_INCREASE", "ESCALATE_HUMAN"],
             "MANDATE_REVOKED": ["REAUTHORIZE_MANDATE", "COLLECT_OUTSTANDING_PAYMENT", "ESCALATE_HUMAN"],
             "FRAUD_SUSPECTED": ["STOP", "ESCALATE_HUMAN"],
             "NETWORK_DECLINE": ["RETRY_SAME_RAIL_COOLDOWN", "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL", "ESCALATE_HUMAN"],

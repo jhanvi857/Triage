@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Triage ML Ranking Service — Model Training & Evaluation Pipeline
+Triage ML Ranking Service - Model Training & Evaluation Pipeline
 Autonomous Machine-Learning Intervention Ranking across Bounded Recovery Actions
 
 Principle:
@@ -31,12 +31,13 @@ import joblib
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# Seven root causes
+# Seven root causes + Mandate Limit
 CAUSES = [
     "BANK_DOWNTIME_TIMEOUT",
     "INSUFFICIENT_FUNDS",
     "EXPIRED_CARD",
     "OTP_DROP_OFF",
+    "MANDATE_LIMIT",
     "MANDATE_REVOKED",
     "FRAUD_SUSPECTED",
     "NETWORK_DECLINE",
@@ -62,6 +63,11 @@ ACTIONS_BY_CAUSE = {
     "OTP_DROP_OFF": [
         "RESUME_CHECKOUT",
         "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
+        "ESCALATE_HUMAN",
+    ],
+    "MANDATE_LIMIT": [
+        "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL",
+        "REQUEST_MANDATE_LIMIT_INCREASE",
         "ESCALATE_HUMAN",
     ],
     "MANDATE_REVOKED": [
@@ -180,7 +186,20 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
                 return 0.58
             return 0.15
 
-    # 6. MANDATE_REVOKED interactions
+    # 6. MANDATE_LIMIT interactions
+    elif cause == "MANDATE_LIMIT":
+        if action == "SWITCH_TO_AVAILABLE_ALTERNATE_RAIL":
+            # One-Time UPI is dominant: same-day, zero friction, mandate untouched for next cycle
+            return 0.89
+        elif action == "REQUEST_MANDATE_LIMIT_INCREASE":
+            # Async background action: multi-day re-auth, lower immediate recovery rate
+            return 0.35
+        elif action == "ESCALATE_HUMAN":
+            if amount >= 1500000:
+                return 0.50
+            return 0.20
+
+    # 7. MANDATE_REVOKED interactions
     elif cause == "MANDATE_REVOKED":
         if action == "REAUTHORIZE_MANDATE":
             if amount <= 800000:
@@ -203,7 +222,7 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
                 return 0.75
             return 0.30
 
-    # 7. FRAUD_SUSPECTED interactions
+    # 8. FRAUD_SUSPECTED interactions
     elif cause == "FRAUD_SUSPECTED":
         if action == "ESCALATE_HUMAN":
             return 0.40
@@ -211,7 +230,7 @@ def calculate_ground_truth_prob(features: dict, action: str) -> float:
             return 0.0
         return 0.0
 
-    # 8. NETWORK_DECLINE interactions
+    # 9. NETWORK_DECLINE interactions
     elif cause == "NETWORK_DECLINE":
         if action == "RETRY_SAME_RAIL_COOLDOWN":
             return 0.76
@@ -238,7 +257,7 @@ def generate_synthetic_dataset(num_cases: int = 4000, seed: int = 42):
     for i in range(num_cases):
         cause = np.random.choice(
             CAUSES,
-            p=[0.24, 0.26, 0.16, 0.14, 0.10, 0.04, 0.06]
+            p=[0.22, 0.24, 0.15, 0.13, 0.08, 0.08, 0.04, 0.06]
         )
 
         # Contextual feature sampling
@@ -247,6 +266,9 @@ def generate_synthetic_dataset(num_cases: int = 4000, seed: int = 42):
             payday_prox = int(np.random.choice([0, 1, 2, 7, 12, 18, 22]))
         elif cause == "BANK_DOWNTIME_TIMEOUT":
             amount_paise = int(np.random.choice([200000, 360000, 480000, 650000, 1200000, 1800000]))
+            payday_prox = int(np.random.randint(0, 25))
+        elif cause == "MANDATE_LIMIT":
+            amount_paise = int(np.random.choice([1600000, 1850000, 2200000, 2500000, 3200000]))
             payday_prox = int(np.random.randint(0, 25))
         elif cause == "MANDATE_REVOKED":
             amount_paise = int(np.random.choice([180000, 350000, 500000, 850000, 1250000, 2500000]))

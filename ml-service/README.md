@@ -68,7 +68,7 @@ The model is trained with genuine non-linear interaction effects ($\text{cause} 
 The synthetic dataset is partitioned at the case level to eliminate data leakage:
 - **70% Training Set** (3,500 cases)
 - **15% Validation Set** (750 cases)
-- **15% Held-Out Test Set** (750 cases — never seen during training)
+- **15% Held-Out Test Set** (750 cases - never seen during training)
 
 ### Held-Out Test Evaluation Results
 
