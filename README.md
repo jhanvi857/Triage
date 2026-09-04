@@ -1,28 +1,34 @@
 # Triage - Cross-Workflow AI Revenue Recovery Control Plane
 
-**Triage** is an autonomous, cross-workflow revenue recovery control plane that detects revenue at risk across all commercial surfaces, diagnoses root causes with zero hallucination, plans bounded intervention sequences, prioritizes actions by marginal Expected Recovery Value ($\text{ERV}$), coordinates competing dunning workflows, executes policy-authorized recoveries, and proves measured money recovered with an immutable SHA-256 cryptographic audit trail.
+> **Autonomous AI revenue recovery control plane that diagnoses payment failures, dynamically times retries to customer liquidity windows, de-conflicts multi-surface dunning, and executes bounded recoveries with an immutable SHA-256 cryptographic audit trail.**
+
+---
+
+## Demo & Architecture Walkthrough
+
+[![Watch Triage Demo Video](https://img.shields.io/badge/Demo%20Video-Watch%20Walkthrough-blue?style=for-the-badge&logo=youtube)](https://drive.google.com/file/d/1uh3zhQRknUTt3QNnbQC6lrApSMwpoHKB/view?usp=sharing)
 
 ---
 
 ## 1. What Razorpay Has Today vs. What Triage Adds
 
-While Razorpay provides industry-leading payment gateway processing, standard subscription dunning schedules, and basic webhook retry queues, it operates within product-isolated silos. Triage provides the overarching AI control plane that turns payment failures and overdue receivables into bounded, optimized recovery loops:
-
 | # | Capability | Razorpay Native Behavior (with Official Docs Citation) | Triage AI Control Plane (New) |
 |:---:|---|---|---|
-| **1** | **Cross-Workflow Coordination** | **Siloed per product**: [Razorpay Subscriptions](https://razorpay.com/docs/subscriptions/) and [Razorpay Invoices](https://razorpay.com/docs/invoices/) operate on disjoint state machines with separate dunning cycles. No cross-product customer entity, contact limiter, or global fatigue cooldown. | **Centralized Customer Entity**: Coordinates recovery across all 6 commercial surfaces; enforces a mandatory 4-hour global contact cooldown and value-ranked suppression. |
+| **1** | **Cross-Workflow Coordination** | **Siloed per product**: [Razorpay Subscriptions](https://razorpay.com/docs/subscriptions/) and [Razorpay Invoices](https://razorpay.com/docs/invoices/) operate on disjoint state machines with separate dunning cycles. Public documentation describes no cross-product customer entity, contact limiter, or global fatigue cooldown. | **Centralized Customer Entity**: Coordinates recovery across all commercial surfaces; enforces a mandatory 4-hour global contact cooldown and value-ranked suppression. |
 | **2** | **Dual-Gated Concession Solvency Engine** | **Static merchant offers**: [Razorpay Offers API](https://razorpay.com/docs/payments/offers/) supports flat/percentage discounts configured manually at the order level, not computed dynamically against an individual customer's solvency gap. | **2-Gate Knapsack Solver**: Gate 1 deterministic gap-closing check ($\text{bal} \ge \text{amt} - \text{concession}$) + Gate 2 marginal ERV density portfolio budget allocator. |
 | **3** | **Payday-Aware Adaptive Sequencer** | **Fixed daily schedule**: [Razorpay Subscriptions Payment Retries](https://razorpay.com/docs/subscriptions/payment-retries/) retries on a fixed T+1, T+2, T+3 day cycle regardless of decline reason - not liquidity-timed (exhausts attempts while account is empty). | **Payday Proximity Sequencer**: Times retries to customer salary liquidity windows ($\le 3$ days), executing debits when funds actually land in the bank account. |
-| **4** | **Conversational Hinglish & Promise-to-Pay (PTP)** | **Static SMS / email links**: Production dunning uses standard notification templates. Track 03 of the Razorpay AI Buildathon explicitly challenged builders to create conversational Hinglish voice recovery & Promise-to-Pay (PTP) trackers. | **NLP & Voice PTP Engine**: Extracts conversational dates (*"parso karunga"* / *"5 tarik"*) into structured schedules, tracking stateful `PTP_COMMITTED` $\to$ `RECOVERED`/`PTP_MISSED` transitions. |
-| **5** | **Instrument Invalidation Candidate Bounds** | **Blind daily retries**: [Razorpay Retries Documentation](https://razorpay.com/docs/subscriptions/payment-retries/) does not document reason-aware skipping - retries proceed on the same T+1/T+2/T+3 schedule regardless of decline cause until attempts exhaust and status becomes `halted`. | **Strict Candidate Bounds**: Sets $\hat{P}(\text{recover} \mid \text{same rail}) = 0$ on expired cards/revoked mandates, pruning blind retries and shifting instantly to alternate rails or update links. |
+| **4** | **Conversational Hinglish & Promise-to-Pay (PTP)** | **Static SMS / email links**: Production dunning uses standard notification templates. Track 03 of the Razorpay AI Buildathon explicitly challenged builders to introduce conversational Hinglish recovery and Promise-to-Pay (PTP) tracking. | **NLP & Voice PTP Engine**: Extracts conversational dates (*"parso karunga"* / *"5 tarik"*) into structured schedules, tracking stateful `PTP_COMMITTED` $\to$ `RECOVERED`/`PTP_MISSED` transitions. |
+| **5** | **Instrument Invalidation Candidate Bounds** | **Blind daily retries**: [Razorpay Retries Documentation](https://razorpay.com/docs/subscriptions/payment-retries/) retries on the same daily cycle until attempts exhaust and status becomes `halted`. No automatic instrument-pruning on permanent card expiry or bank revocation. | **Strict Candidate Bounds**: Sets $\hat{P}(\text{recover} \mid \text{same rail}) = 0$ on expired cards/revoked mandates, pruning blind retries and shifting instantly to alternate rails or 1-click update links. |
 | **6** | **Cryptographic Audit Ledger & Provenance** | **Ephemeral webhook retries**: [Razorpay Webhooks](https://razorpay.com/docs/webhooks/) retries payloads on a 24-hr backoff and disables if failing; lacks an immutable, cryptographic hash-chained audit trail. | **SHA-256 Audit Ledger**: Cryptographically hash-chained ledger storing state transitions, idempotency keys, and tamper-evident financial receipts over real-time SSE. |
-| **7** | **Counterfactual Uplift & "The Bar" Benchmark** | **Aggregate volume metrics**: Standard dashboard reports provide gross volume distribution and exportable transaction logs, but lack a causal/counterfactual policy testing framework. | **3-Model Benchmark Harness**: Evaluates Ledger AI vs. Static Rule vs. Random Policy under identical held-out Bernoulli conditions, proving net ₹ recovered uplift ($p < 0.001$). |
+| **7** | **Counterfactual Uplift Benchmark** | **Aggregate volume metrics**: Standard reports provide gross volume distribution and exportable transaction logs; public documentation describes no causal counterfactual policy benchmarking framework. | **3-Model Benchmark Harness**: Evaluates Ledger AI vs. Static Rule vs. Random Policy under identical held-out Bernoulli conditions, proving net recovery uplift ($p < 0.001$). |
+
+
 
 ---
 
 ## 2. End-to-End Decision Flow & Authority Pipeline
 
-Triage runs a strict 5-stage authority pipeline that separates non-authoritative communication from authoritative idempotent execution. **ML decisions run directly inside the Go Gateway via an embedded Random Forest inference engine (<1ms latency)** with zero required external Python services:
+Triage runs a strict 5-stage authority pipeline separating non-authoritative communication from authoritative idempotent execution. **ML decisions run directly inside the Go Gateway via an embedded Random Forest inference engine (<1ms latency)** with zero external dependencies:
 
 ```text
                REVENUE AT RISK SURFACES
@@ -88,7 +94,7 @@ Triage runs a strict 5-stage authority pipeline that separates non-authoritative
 ### The 5 Stages of Recovery Decisioning
 
 1. **Deterministic Diagnosis (0 AI)**:
-   * Maps raw decline codes (`INSUFFICIENT_FUNDS`, `GATEWAY_TIMEOUT_504`, `TRANSACTION_TIMEOUT`, `LIMIT_EXCEEDED`, `CARD_EXPIRED`) and gateway step metadata into universal root causes. Zero hallucinations, 100% deterministic.
+   * Maps raw decline codes (`INSUFFICIENT_FUNDS`, `GATEWAY_TIMEOUT_504`, `TRANSACTION_TIMEOUT`, `LIMIT_EXCEEDED`, `CARD_EXPIRED`, `OVERDUE_INVOICE`) and step metadata into universal root causes. Zero hallucinations, 100% deterministic.
 
 2. **Context-Aware Eligibility & Candidate Bounds**:
    * Inspects customer context: available balance, payday proximity, verified backup cards on file, UPI availability, and remaining attempt limits.
@@ -100,15 +106,14 @@ Triage runs a strict 5-stage authority pipeline that separates non-authoritative
    * Computes predicted recovery probability $\hat{P}(\text{recover} \mid \mathbf{x}, a)$ for every eligible action.
    * Computes net **Expected Recovery Value ($\text{ERV}$)**:
      $$\text{ERV} = \hat{P}(\text{recover} \mid \mathbf{x}, a) \times (\text{Amount} - \text{Discount})$$
-   * Sorts candidate actions by descending $\text{ERV}$ to pick the optimal mathematical intervention.
-   * *Dual Mode*: Automatically queries Python `ml-service` if running (`http://localhost:8000`), otherwise executes embedded Go Random Forest with zero downtime.
+   * Sorts candidate actions by descending $\text{ERV}$ to select the mathematically optimal intervention.
 
 4. **Deterministic Policy Engine & Hard Vetoes**:
    * Evaluates 5 immutable safety rules:
      * `CANDIDATE_LEGITIMACY`: Proposed action must exist in the context-eligible set.
      * `MAX_ATTEMPTS_LIMIT`: Current attempts must be $< 3$. When reaching 3, enforces `MARK_LOST_EXHAUSTED`.
      * `FRAUD_SECURITY_GATE`: If root cause is `FRAUD_SUSPECTED`, immediately vetoes with `STOP`.
-     * `HIGH_VALUE_THRESHOLD`: If amount $\ge \text{₹}10,000$, vetoes automated dunning and routes to Senior Retention Desk (`ESCALATE_HUMAN`).
+     * `HIGH_VALUE_THRESHOLD`: If amount $\ge \text{₹}10,000$, routes to Senior Retention Desk (`ESCALATE_HUMAN`).
      * `CONCESSION_BUDGET_CAP`: Any concession discount must be $\le 5\%$ AND $\le \text{₹}500$.
 
 5. **Execution Envelope & Cryptographic SHA-256 Ledger**:
@@ -118,7 +123,7 @@ Triage runs a strict 5-stage authority pipeline that separates non-authoritative
 
 ---
 
-## 3. The 5 Core Storefront Payment Decline Scenarios & Resolutions
+## 3. Core Failure Scenarios & Resolutions
 
 Every failure scenario maps to a deterministic eligibility envelope. Discounts and concessions are strictly gated and never offered outside their justified mathematical boundary.
 
@@ -128,12 +133,12 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 | **Insufficient Balance** *(Payday Near)* | `INSUFFICIENT_FUNDS` | **`RETRY_NEXT_PAYDAY_WINDOW`** | NO | When customer balance is below the concession gap but payday proximity is $\le 3$ days, schedules automated retry when funds clear. |
 | **Insufficient Balance** *(Alternate Card)* | `INSUFFICIENT_FUNDS` | **`SWITCH_TO_SAVED_CARD`** | NO | When customer has a verified secondary card on file, prompts 1-tap switch without eroding merchant revenue. |
 | **Insufficient Balance** *(Verbal Agreement)* | `INSUFFICIENT_FUNDS` | **`PROMISE_TO_PAY`** | NO | Hinglish conversational extraction parses customer commitment date (e.g. *"5 tarik ko payment kar dunga"*) into a structured promise. |
-| **Bank Gateway Downtime** | `BANK_DOWNTIME_TIMEOUT` / `504` | **`RETRY_SAME_RAIL_COOLDOWN`** | NO | Infrastructure failure. Offering a discount is irrational. System enforces off-peak cooldown retry or rail switch. |
+| **Bank Gateway Downtime** | `BANK_DOWNTIME_TIMEOUT` / `504` | **`RETRY_SAME_RAIL_COOLDOWN`** | NO | Infrastructure failure. System enforces off-peak cooldown retry or rail switch. |
 | **Expired Card / Invalid Instrument** | `EXPIRED_CARD` / `CARD_EXPIRED` | **`UPDATE_PAYMENT_METHOD`** | NO | Instrument invalidation. Retrying the same card is blocked by Candidate Bounds. Dispatches 1-click tokenized card update link. |
 | **3DS / OTP Drop-off** | `OTP_DROP_OFF` / `3DS_DROP_OFF` | **`RESUME_CHECKOUT`** | NO | Customer was already in high-intent conversion. Dispatches 1-click cart resumption link with saved session state. |
-| **Mandate Limit Exceeded** *(Per-Debit Cap)* | `MANDATE_LIMIT` | **`SWITCH_TO_AVAILABLE_ALTERNATE_RAIL`** *(One-Time UPI)* | NO | **Dominant Action**: Per-debit cap breach affects *only this transaction* — the recurring mandate remains alive for future cycles. One-Time UPI intent/collect settles same-day without bank round-trips or touching the mandate. Async limit-increase request logged non-blocking in background. Support advisory reserved strictly as fallback if UPI fails. |
-| **Mandate Revoked / Cancelled at Bank** | `MANDATE_REVOKED` | **`REAUTHORIZE_MANDATE`** | NO | Permanent mandate cancellation at destination bank. Dispatches 1-click tokenized e-mandate reauthorization link or one-time invoice. |
-| **B2B Overdue Receivables** | `OVERDUE_INVOICE` | **`COLLECT_OUTSTANDING_PAYMENT`** | NO | Triggers structured enterprise invoice settlement workflow with cross-workflow dunning deconfliction. |
+| **Mandate Limit Exceeded** *(Per-Debit Cap)* | `MANDATE_LIMIT` | **`SWITCH_TO_AVAILABLE_ALTERNATE_RAIL`** *(One-Time UPI)* | NO | **Dominant Action**: Per-debit cap breach affects *only this transaction*. The recurring mandate remains alive for future cycles. One-Time UPI intent settles same-day without touching the mandate. |
+| **Mandate Revoked / Cancelled at Bank** | `MANDATE_REVOKED` | **`REAUTHORIZE_MANDATE`** | NO | Permanent mandate cancellation at destination bank. Dispatches 1-click tokenized e-mandate reauthorization link. |
+| **B2B Overdue Receivables** | `OVERDUE_INVOICE` | **`COLLECT_OUTSTANDING_PAYMENT`** | NO | Dedicated B2B invoice checkout workflow with net terms tracking and cross-workflow dunning deconfliction. |
 | **Suspected Fraud** | `FRAUD_SUSPECTED` | **`STOP`** | NO | Deterministic safety rule: immediate freeze on automated recovery, zero retry, and platform-wide dunning halt. |
 | **High Value ($\ge \text{₹}10,000$)** | Any High Value | **`ESCALATE_HUMAN`** | Policy Bound | Bypasses automated dunning and routes directly to Senior Retention/Risk Desk for manual high-touch outreach. |
 | **Exhaustion ($\ge 3$ Attempts)** | Any Repeated | **`MARK_LOST_EXHAUSTED`** | NO | Hard stopping rule: halts all automated recovery after 3 failed attempts to maintain merchant compliance and reputation. |
@@ -143,7 +148,7 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 ## 4. Key Architectural Decisions
 
 ### Decision 1: The Dual-Gated Solvency Concession Engine
-* **The Problem**: Static or unconstrained discounting burns margin on customers who either don't need it or where the gap is too wide to close.
+* **The Problem**: Static or unconstrained discounting burns margin on customers who either do not need it or where the gap is too wide to close.
 * **The Architecture**:
   1. **Gate 1 - Deterministic Solvency Check (Per-Case)**:
      ```text
@@ -158,9 +163,9 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 * **Integrity**: Gate evaluations are authoritative in the Go backend (`eligibility.go`). No hardcoded case IDs or client-side bypasses exist.
 
 ### Decision 2: Cross-Workflow Customer Coordination
-* **The Problem**: When a merchant customer experiences an abandoned checkout, a failed recurring subscription, and an overdue invoice simultaneously, uncoordinated systems send 3 conflicting emails in the same hour, degrading brand trust.
+* **The Problem**: When a merchant customer experiences an abandoned checkout, a failed recurring subscription, and an overdue invoice simultaneously, uncoordinated systems send 3 conflicting notifications in the same hour, degrading brand trust.
 * **The Architecture**:
-  - Centralized customer entity coordinating across all 6 surfaces.
+  - Centralized customer entity coordinating across all commercial surfaces.
   - Enforces a mandatory **4-hour global contact cooldown**.
   - Ranks competing opportunities by value: prioritizes high-value checkouts (e.g. ₹18,000) and suppresses lower-value dunning (e.g. ₹4,200 subscription) until the primary issue resolves.
 
@@ -169,16 +174,46 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 * **Integrity**: Scheduling a payday retry, registering a Promise-to-Pay (PTP), or updating a card leaves `amount_recovered = 0`. Downgrading an already-recovered case away from `RECOVERED` is cryptographically forbidden.
 
 ### Decision 4: Production ML Deployment Trade-Off
-* **The Architecture**: While XGBoost achieved a marginal benchmark advantage (+10.73pp vs +6.82pp on synthetic partitions), Triage deploys a pure **Random Forest Classifier** to production.
+* **The Architecture**: While XGBoost achieved a marginal benchmark advantage on synthetic partitions, Triage deploys a pure **Random Forest Classifier** to production.
 * **The Trade-Off**: Eliminates native C++ compilation dependencies (`libxgboost`/`OpenMP`), prevents container version drift, and guarantees deterministic, 100% auditable tree traversal for regulatory financial compliance.
 
-### Decision 5: Live Storefront Telemetry vs. Offline Benchmark
-* **The Architecture**: The **Live Operations** cockpit (`OVERVIEW`) listens exclusively to real SSE webhooks from the customer storefront (`localhost:5173`). Cases are tagged as `LIVE · SANDBOX` (real browser actions in Razorpay test mode) or `LIVE · HMAC VERIFIED`.
+### Decision 5: Live Telemetry vs. Offline Benchmark
+* **The Architecture**: The **Live Operations** cockpit (`OVERVIEW`) listens exclusively to real SSE webhooks from the customer storefront. Cases are tagged as `LIVE · SANDBOX` or `LIVE · HMAC VERIFIED`.
 * **Zero Dummy Data**: Root causes and operational KPIs are computed dynamically from live cases. Offline statistical evaluation is housed strictly in the **Batch Evaluation (`EVALUATION`)** harness.
 
 ---
 
-## 5. Bounded State Machine
+## 5. Build Challenges & Technical Obstacles
+
+* **1. Eliminating AI Hallucination in Financial Decisioning**
+  * *Obstacle:* Relying on generative AI for diagnosing payment failures caused non-deterministic advice (e.g., proposing retries on expired cards or unauthorized discounts).
+  * *Solution:* Built a strict **5-Stage Authority Pipeline** where Diagnosis (Stage 1) and Candidate Bounds (Stage 2) are 100% deterministic code rules. ML is isolated strictly to ranking expected recovery probability ($\hat{P}$).
+
+* **2. Low-Latency ML Inference (<1ms) Without Microservice Overhead**
+  * *Obstacle:* Routing real-time payment transactions through an external Python ML service added 50-200ms latency and introduced external dependency risks.
+  * *Solution:* Built an **embedded Random Forest inference engine in pure Go** directly inside the gateway, delivering `<1ms` scoring per candidate action with seamless dual-mode fallback to Python if active.
+
+* **3. Margin Erosion from Blind Discounting**
+  * *Obstacle:* Standard recovery systems offer flat discounts blindly, cannibalizing profit on willing payers or offering discounts too small to bridge large solvency gaps.
+  * *Solution:* Implemented a **Dual-Gated Knapsack Solver** where Gate 1 deterministically checks that the discount mathematically closes the shortfall, and Gate 2 optimizes portfolio budget allocation based on marginal ERV density.
+
+* **4. Parsing Natural Hinglish for Promise-to-Pay (PTP)**
+  * *Obstacle:* Standard date parsers failed on colloquial Hindi/English voice and text promises (e.g., *"5 tarik ko kar dunga"*, *"parso payment ho jayegi"*).
+  * *Solution:* Developed a domain-specific NLP regex and temporal dictionary parser that extracts conversational Indian date entities into stateful cron recovery schedules (`PTP_COMMITTED`).
+
+* **5. Cross-Workflow Notification Fatigue & Dunning Collisions**
+  * *Obstacle:* When a customer had an abandoned cart, a failed subscription, and an overdue invoice at once, separate product silos fired competing emails within minutes.
+  * *Solution:* Unified customer recovery under a centralized entity with an authoritative **4-hour global contact cooldown** and value-ranked suppression.
+
+* **6. Audit Integrity & Anti-Ghost Recovery**
+  * *Obstacle:* Dunning systems often claim "recovered" status simply upon sending reminders or links, inflating performance metrics.
+  * *Solution:* Enforced an immutable **SHA-256 cryptographic hash-chained audit ledger** and a strict accounting invariant: a transaction only transitions to `RECOVERED` when real money is captured via a verified gateway callback (`RecordCapture()`).
+
+---
+
+## 6. Bounded State Machine & Test Suite
+
+### Bounded State Machine
 
 Triage enforces a deterministic, 5-stage finite state machine with strict termination guarantees:
 
@@ -206,11 +241,8 @@ stateDiagram-v2
     LOST --> [*]
 ```
 
----
+### End-to-End Test Suite
 
-## 6. Verification & Test Suite
-
-### Running the End-to-End Validation Suite:
 ```bash
 cd agent
 python triage_scenarios.py --all
@@ -231,12 +263,12 @@ python triage_scenarios.py --all
 
 ---
 
-## 7. Quickstart
+## 7. Quickstart (Local Setup)
 
-### 1. Configure SMTP Relay (Optional for Live Emails):
+### 1. Configure Environment:
 ```bash
 cp .env.example gateway/.env
-# Edit gateway/.env with standard SMTP credentials (e.g. Gmail App Password):
+# Optional SMTP configuration for live recovery nudges:
 # SMTP_HOST=smtp.gmail.com
 # SMTP_PORT=587
 # SMTP_USER=your-email@gmail.com
@@ -263,12 +295,15 @@ npm run dev
 # Open http://localhost:3000
 ```
 
-### 5. Start the Customer Storefront & Billing Portal:
+### 5. Start the Customer Storefront, Billing Portal & Invoicing:
 ```bash
 cd storefront
 npm run dev
 # Storefront: http://localhost:5173
-# Customer Portal: http://localhost:5173/portal
+# Customer Billing Portal: http://localhost:5173/portal
+# B2B Invoice Settlement: http://localhost:5173/invoice/inv_01
 ```
 
-> Built for **Razorpay AI Buildathon Track 03: AI Revenue Recovery** (*Find revenue that’s slipping away and win it back*).
+---
+
+> Built for **Razorpay AI Buildathon Track 03: AI Revenue Recovery** (*Find revenue that is slipping away and win it back*).
