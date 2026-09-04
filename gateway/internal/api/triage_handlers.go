@@ -551,18 +551,6 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 				c.Diagnosis = &diag
 			}
 
-			extraCtx := map[string]interface{}{
-				"payday_proximity_days":        c.PaydayProximityDays,
-				"historical_success_rate":      c.HistoricalSuccessRate,
-				"attempt_number":               c.AttemptsMade + 1,
-				"has_alternate_saved_card":     c.HasAlternateSavedCard,
-				"alternate_saved_card_label":   c.AlternateSavedCardLabel,
-				"alternate_card_success_count": c.AlternateCardSuccessCount,
-				"has_upi_available":            c.HasUPIAvailable,
-				"human_desk_slots_remaining":   5, // TODO: wire from live allocator state
-				"available_balance_paise":      c.AvailableBalancePaise,
-			}
-
 			// Use real budget snapshot instead of hardcoded value
 			var availBudgetPaise int64 = 500000 // fallback ₹5,000
 			if ts.BudgetMgr != nil {
@@ -571,6 +559,28 @@ func (ts *TriageServer) handleSingleCase(w http.ResponseWriter, r *http.Request)
 				if availBudgetPaise < 0 {
 					availBudgetPaise = 0
 				}
+			}
+
+			// Dynamically compute human review desk capacity from live allocator snapshot
+			var humanDeskSlotsRemaining int = 5 // fallback capacity
+			if ts.Allocator != nil && ts.RecoveryMgr != nil {
+				allocSnap := ts.Allocator.OptimizePortfolio(ts.RecoveryMgr.ListCases(), availBudgetPaise, 5)
+				humanDeskSlotsRemaining = allocSnap.HumanDeskSlotsRemaining
+				if humanDeskSlotsRemaining < 0 {
+					humanDeskSlotsRemaining = 0
+				}
+			}
+
+			extraCtx := map[string]interface{}{
+				"payday_proximity_days":        c.PaydayProximityDays,
+				"historical_success_rate":      c.HistoricalSuccessRate,
+				"attempt_number":               c.AttemptsMade + 1,
+				"has_alternate_saved_card":     c.HasAlternateSavedCard,
+				"alternate_saved_card_label":   c.AlternateSavedCardLabel,
+				"alternate_card_success_count": c.AlternateCardSuccessCount,
+				"has_upi_available":            c.HasUPIAvailable,
+				"human_desk_slots_remaining":   humanDeskSlotsRemaining,
+				"available_balance_paise":      c.AvailableBalancePaise,
 			}
 
 			decision := ts.InterSelector.SelectIntervention(c.ID, *c.Diagnosis, c.AttemptsMade, c.AmountPaise, c.OriginalRail, availBudgetPaise, extraCtx)
@@ -1021,18 +1031,18 @@ func (ts *TriageServer) handleMLMetrics(w http.ResponseWriter, r *http.Request) 
 
 	metrics, err := ts.MLClient.FetchMetrics()
 	if err != nil {
-		// Return embedded fallback metrics
+		// Return embedded Random Forest metrics
 		metrics = &mlclient.MLMetrics{
-			ModelType:               "RandomForestClassifier (100 Trees)",
+			ModelType:               "RandomForestClassifier (Embedded Go)",
 			NEstimators:             100,
 			TestCasesEvaluated:      750,
-			RocAuc:                  0.9945,
-			Precision:               0.9812,
-			Recall:                  0.9463,
-			F1Score:                 0.9634,
-			Accuracy:                0.9639,
-			AbsoluteUpliftPctPoints: 5.87,
-			RelativeUpliftPct:       22.26,
+			RocAuc:                  0.7819,
+			Precision:               0.6788,
+			Recall:                  0.8478,
+			F1Score:                 0.7539,
+			Accuracy:                0.7192,
+			AbsoluteUpliftPctPoints: 5.60,
+			RelativeUpliftPct:       11.12,
 		}
 	}
 

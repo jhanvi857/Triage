@@ -104,7 +104,7 @@ func (h *Harness) RunBatch(numCases int) Result {
 	} else {
 		// Canonical held-out metrics from realistic stochastic evaluation
 		res.ModelMetrics = &mlclient.MLMetrics{
-			ModelType:               "RandomForestClassifier (100 Trees)",
+			ModelType:               "RandomForestClassifier (Embedded Go)",
 			NEstimators:             100,
 			TestCasesEvaluated:      750,
 			RocAuc:                  0.7819,

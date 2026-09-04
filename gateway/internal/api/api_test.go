@@ -12,6 +12,7 @@ import (
 	"github.com/ledger/gateway/internal/budget"
 	"github.com/ledger/gateway/internal/diagnosis"
 	"github.com/ledger/gateway/internal/intervention"
+	"github.com/ledger/gateway/internal/mlclient"
 	"github.com/ledger/gateway/internal/recovery"
 )
 
@@ -388,3 +389,65 @@ func TestAPI_StrictScheduledRetryLifecycle_ExplicitPendingAndAttemptBounds(t *te
 	}
 }
 
+func TestAPI_FallbackHonestBrandingWhenMLOffline(t *testing.T) {
+	mux := http.NewServeMux()
+	diag := diagnosis.NewEngine()
+	inter := intervention.NewSelector()
+	mgr := recovery.NewManager()
+	budgetMgr := budget.NewManager(1000000)
+
+	ts := NewTriageServer(diag, inter, mgr, budgetMgr)
+	// Explicitly configure MLClient to point to an offline/unreachable port
+	ts.MLClient = mlclient.NewClient("http://127.0.0.1:59999")
+	inter.SetMLClient(ts.MLClient)
+	ts.RegisterRoutes(mux)
+
+	// 1. Check /api/v1/triage/ml/metrics endpoint
+	metricsReq := httptest.NewRequest("GET", "/api/v1/triage/ml/metrics", nil)
+	metricsW := httptest.NewRecorder()
+	mux.ServeHTTP(metricsW, metricsReq)
+
+	if metricsW.Code != http.StatusOK {
+		t.Fatalf("expected 200 from metrics, got %d", metricsW.Code)
+	}
+
+	var metricsResp map[string]interface{}
+	if err := json.Unmarshal(metricsW.Body.Bytes(), &metricsResp); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	modelType, _ := metricsResp["model_type"].(string)
+	if modelType != "RandomForestClassifier (Embedded Go)" {
+		t.Fatalf("expected model_type 'RandomForestClassifier (Embedded Go)' when ML service offline, got '%s'", modelType)
+	}
+
+	// 2. Advance a case to INTERVENING through the API and verify fallback ranking execution
+	caseReqBody := `{"customer_name":"Branding Test Corp","customer_email":"test@branding.com","plan_name":"Scale","amount_paise":400000,"error_code":"INSUFFICIENT_FUNDS","error_desc":"Low balance"}`
+	caseReq := httptest.NewRequest("POST", "/api/v1/triage/cases", bytes.NewReader([]byte(caseReqBody)))
+	caseW := httptest.NewRecorder()
+	mux.ServeHTTP(caseW, caseReq)
+
+	var createdCase map[string]interface{}
+	_ = json.Unmarshal(caseW.Body.Bytes(), &createdCase)
+	caseID := createdCase["id"].(string)
+
+	// Advance NEW -> DIAGNOSED
+	adv1Req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/advance", caseID), nil)
+	mux.ServeHTTP(httptest.NewRecorder(), adv1Req)
+
+	// Advance DIAGNOSED -> INTERVENING (calls ML ranking / fallback)
+	adv2Req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/triage/cases/%s/advance", caseID), nil)
+	adv2W := httptest.NewRecorder()
+	mux.ServeHTTP(adv2W, adv2Req)
+
+	c, ok := ts.RecoveryMgr.GetCase(caseID)
+	if !ok {
+		t.Fatalf("failed to retrieve case %s", caseID)
+	}
+	if c.Intervention == nil {
+		t.Fatalf("expected intervention decision to be computed via fallback")
+	}
+	if c.Intervention.Action == "" {
+		t.Fatalf("expected non-empty action from fallback")
+	}
+}
