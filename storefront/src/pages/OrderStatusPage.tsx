@@ -39,6 +39,8 @@ interface TriageCase {
   plan_name: string;
   amount_inr: number;
   amount_paise: number;
+  recovered_amount_paise?: number;
+  incentive_discount_paise?: number;
   available_balance_inr?: number;
   available_balance_paise?: number;
   original_rail: string;
@@ -75,6 +77,8 @@ interface TriageCase {
   };
   customer_facing_msg?: string;
   can_update_payment_method?: boolean;
+  attempts_made?: number;
+  max_attempts?: number;
   razorpay_payment_id?: string;
   created_at: string;
 }
@@ -102,7 +106,7 @@ export const OrderStatusPage: React.FC = () => {
   const [selectedUpiApp, setSelectedUpiApp] = useState<string>('Google Pay');
 
   // Retry schedule state
-  const [selectedRetryWindow, setSelectedRetryWindow] = useState<string>('30_mins');
+  const [selectedRetryWindow, setSelectedRetryWindow] = useState<string>('10_seconds');
   const [retryScheduledMsg, setRetryScheduledMsg] = useState<string | null>(null);
 
   // PTP state
@@ -121,6 +125,11 @@ export const OrderStatusPage: React.FC = () => {
 
   // Escalate state
   const [escalatedMsg, setEscalatedMsg] = useState<string | null>(null);
+
+  // Accelerated Demo Execution Timer state for PTP and Scheduled Retries (for demo only)
+  const [demoExecutionCountdown, setDemoExecutionCountdown] = useState<number | null>(null);
+  const [demoExecutionType, setDemoExecutionType] = useState<'RETRY' | 'PTP' | null>(null);
+  const [retryWindowArrived, setRetryWindowArrived] = useState(false);
 
   const fetchCase = async () => {
     try {
@@ -158,6 +167,9 @@ export const OrderStatusPage: React.FC = () => {
     setLinkSentMsg(null);
     setInvoiceSent(false);
     setEscalatedMsg(null);
+    setDemoExecutionCountdown(null);
+    setDemoExecutionType(null);
+    setRetryWindowArrived(false);
     userHasSelectedTab.current = false;
     autoSettledRef.current = false;
   }, [caseId, email]);
@@ -167,6 +179,48 @@ export const OrderStatusPage: React.FC = () => {
     const interval = setInterval(fetchCase, 2500);
     return () => clearInterval(interval);
   }, [caseId, email]);
+
+  // Accelerated Demo Execution Timer for PTP and Scheduled Retries
+  useEffect(() => {
+    if (demoExecutionCountdown === null || !caseData) return;
+    if (demoExecutionCountdown > 0) {
+      const timer = setTimeout(() => {
+        setDemoExecutionCountdown(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+
+    if (demoExecutionCountdown === 0) {
+      setIsResolving(true);
+      const isPtp = demoExecutionType === 'PTP';
+      const notes = isPtp
+        ? 'Promise-to-Pay scheduled date arrived. 1-Click authorization link dispatched.'
+        : 'Scheduled retry window arrived. 1-Click authorization link dispatched.';
+
+      fetch('http://localhost:8080/api/v1/triage/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: caseData.customer_email,
+          case_id: caseData.id,
+          email_type: 'ACTION_REQUIRED',
+          amount_inr: caseData.amount_inr,
+          notes: notes
+        })
+      })
+        .then(() => {
+          setRetryWindowArrived(true);
+          setEmailPendingNotice(
+            `Scheduled window arrived: 1-Click recovery authorization link delivered to ${caseData.customer_email || 'your email'}. Click the link in your email (or click the button below) to complete payment capture.`
+          );
+        })
+        .catch(console.error)
+        .finally(() => {
+          setIsResolving(false);
+          setDemoExecutionCountdown(null);
+        });
+    }
+  }, [demoExecutionCountdown, demoExecutionType, caseData?.id]);
 
   // Auto-settle 1-click recovery link from email
   useEffect(() => {
@@ -199,6 +253,25 @@ export const OrderStatusPage: React.FC = () => {
   // Compute legal allowed tabs strictly from policy whitelist + ML recommendation tags
   const getAvailableTabs = (c: TriageCase | null): TabDefinition[] => {
     if (!c) return [];
+
+    // Stopping Rules & Safety Vetoes: Halt all automated self-serve options
+    if (
+      (c.attempts_made ?? 0) >= 3 ||
+      c.status === 'LOST' ||
+      c.intervention?.action === 'MARK_LOST_EXHAUSTED' ||
+      c.intervention?.action === 'STOP' ||
+      c.intervention?.action === 'ESCALATE_HUMAN' ||
+      c.intervention?.policy_verdict === 'VETOED' ||
+      c.diagnosis?.recommended_action === 'MARK_LOST_EXHAUSTED' ||
+      c.diagnosis?.recommended_action === 'STOP' ||
+      c.diagnosis?.recommended_action === 'ESCALATE_HUMAN' ||
+      c.error_code === 'ATTEMPTS_EXHAUSTED' ||
+      c.error_code === 'FRAUD_SUSPECTED' ||
+      c.error_code === 'HIGH_VALUE_GATE'
+    ) {
+      return [];
+    }
+
     const rootCause = c.diagnosis?.root_cause || (c.error_code === 'GATEWAY_TIMEOUT_504' ? 'BANK_DOWNTIME_TIMEOUT' : c.error_code);
     const mlAction = c.intervention?.action || c.intervention?.ml_recommendation || c.diagnosis?.recommended_action || '';
     const isFunds = rootCause === 'INSUFFICIENT_FUNDS' || c.error_code === 'INSUFFICIENT_FUNDS';
@@ -225,6 +298,8 @@ export const OrderStatusPage: React.FC = () => {
         switch (rootCause) {
           case 'INSUFFICIENT_FUNDS':
             return ['INCENTIVE_DISCOUNT', 'SWITCH_TO_SAVED_CARD', 'SWITCH_TO_AVAILABLE_ALTERNATE_RAIL', 'RETRY_NEXT_PAYDAY_WINDOW', 'PROMISE_TO_PAY'];
+          case 'OVERDUE_INVOICE':
+            return ['PROMISE_TO_PAY', 'COLLECT_OUTSTANDING_PAYMENT'];
           case 'BANK_DOWNTIME_TIMEOUT':
           case 'GATEWAY_ERROR':
           case 'NETWORK_DECLINE':
@@ -233,8 +308,10 @@ export const OrderStatusPage: React.FC = () => {
           case 'TRANSACTION_TIMEOUT':
             return ['RESUME_CHECKOUT', 'SWITCH_TO_AVAILABLE_ALTERNATE_RAIL', 'PROMISE_TO_PAY'];
           case 'MANDATE_REVOKED':
+            return ['REAUTHORIZE_MANDATE', 'COLLECT_OUTSTANDING_PAYMENT'];
+          case 'MANDATE_LIMIT':
           case 'LIMIT_EXCEEDED':
-            return ['REAUTHORIZE_MANDATE', 'COLLECT_OUTSTANDING_PAYMENT', 'PROMISE_TO_PAY'];
+            return ['SWITCH_TO_AVAILABLE_ALTERNATE_RAIL', 'REQUEST_MANDATE_LIMIT_INCREASE'];
           case 'EXPIRED_CARD':
             return ['UPDATE_PAYMENT_METHOD'];
           case 'FRAUD_SUSPECTED':
@@ -341,13 +418,13 @@ export const OrderStatusPage: React.FC = () => {
       });
     }
 
-    // 7. Promise to Pay (PTP) - Available across all non-fraud causes
-    if (actions.includes('PROMISE_TO_PAY') && rootCause !== 'FRAUD_SUSPECTED') {
-      const isRec = mlAction === 'PROMISE_TO_PAY';
+    // 7. Promise to Pay (PTP) - Available across all non-fraud causes where allowed
+    if (actions.includes('PROMISE_TO_PAY') && rootCause !== 'FRAUD_SUSPECTED' && rootCause !== 'MANDATE_REVOKED' && rootCause !== 'MANDATE_LIMIT' && rootCause !== 'LIMIT_EXCEEDED' && rootCause !== 'EXPIRED_CARD') {
+      const isRec = mlAction === 'PROMISE_TO_PAY' || rootCause === 'OVERDUE_INVOICE';
       tabs.push({
         key: 'PTP',
         label: 'Promise to Pay',
-        subLabel: 'Conversational date scheduling',
+        subLabel: rootCause === 'OVERDUE_INVOICE' ? 'Enterprise date commitment' : 'Conversational date scheduling',
         icon: <Calendar size={14} />,
         isRecommended: isRec
       });
@@ -396,6 +473,13 @@ export const OrderStatusPage: React.FC = () => {
     if (!caseData || userHasSelectedTab.current) return;
 
     const isFunds = caseData.diagnosis?.root_cause === 'INSUFFICIENT_FUNDS' || caseData.error_code === 'INSUFFICIENT_FUNDS';
+    const isOverdue = caseData.diagnosis?.root_cause === 'OVERDUE_INVOICE' || caseData.error_code === 'OVERDUE_INVOICE';
+    
+    if (isOverdue) {
+      setActiveTab('PTP');
+      return;
+    }
+
     if (isFunds) {
       const isDiscountAuthorized = caseData.allowed_actions?.includes('INCENTIVE_DISCOUNT') ||
         caseData.candidate_evaluations?.find(evalItem => evalItem.action === 'INCENTIVE_DISCOUNT')?.eligible === true ||
@@ -432,6 +516,21 @@ export const OrderStatusPage: React.FC = () => {
   const discountedPriceINR = (invoiceAmount - maxDiscountINR).toFixed(2);
   const discountSavingsINR = maxDiscountINR.toFixed(2);
 
+  const settledAmountINR = caseData?.recovered_amount_paise
+    ? (caseData.recovered_amount_paise / 100).toFixed(2)
+    : (caseData?.incentive_discount_paise
+      ? ((caseData.amount_inr * 100 - caseData.incentive_discount_paise) / 100).toFixed(2)
+      : (caseData?.amount_inr || 0).toFixed(2));
+
+  const hasDiscountApplied = (caseData?.incentive_discount_paise || 0) > 0 ||
+    ((caseData?.recovered_amount_paise || 0) > 0 && (caseData?.recovered_amount_paise || 0) < ((caseData?.amount_paise || 0) || (caseData?.amount_inr || 0) * 100));
+
+  const discountSavingsFormatted = caseData?.incentive_discount_paise
+    ? (caseData.incentive_discount_paise / 100).toFixed(2)
+    : (caseData?.recovered_amount_paise
+      ? (((caseData.amount_paise || caseData.amount_inr * 100) - caseData.recovered_amount_paise) / 100).toFixed(2)
+      : '0.00');
+
   // Option 1: Instant UPI -> Resolves payment immediately on alternative rail and sends receipt (no recovery link, NO discount)
   const handleInstantUpi = async () => {
     if (!caseData) return;
@@ -465,10 +564,20 @@ export const OrderStatusPage: React.FC = () => {
     setIsResolving(true);
     const targetEmail = caseData.customer_email || 'your registered email';
     try {
-      let label = 'in 30 minutes';
-      if (selectedRetryWindow === 'tomorrow') label = 'Tomorrow at 9:00 AM';
-      if (selectedRetryWindow === 'salary_day') label = '1st of next month (Salary Cycle)';
-      if (selectedRetryWindow === '3_days') label = 'in 3 business days';
+      let label = 'in 10 seconds (for demo)';
+      let isDemo10s = false;
+      if (selectedRetryWindow === '10_seconds') {
+        label = 'in 10 seconds (for demo)';
+        isDemo10s = true;
+      } else if (selectedRetryWindow === '30_mins') {
+        label = 'in 30 minutes';
+      } else if (selectedRetryWindow === 'tomorrow') {
+        label = 'Tomorrow at 9:00 AM';
+      } else if (selectedRetryWindow === 'salary_day') {
+        label = '1st of next month (Salary Cycle)';
+      } else if (selectedRetryWindow === '3_days') {
+        label = 'in 3 business days';
+      }
 
       const res = await fetch(`http://localhost:8080/api/v1/triage/cases/${caseData.id}/resolve`, {
         method: 'POST',
@@ -496,9 +605,52 @@ export const OrderStatusPage: React.FC = () => {
         })
       });
 
-      setRetryScheduledMsg(`Auto-retry successfully locked for ${label}. Confirmation notice sent to ${targetEmail}.`);
+      if (isDemo10s) {
+        setRetryScheduledMsg(`Auto-retry schedule registered for ${label}. Authorization link will be dispatched in 10s upon window arrival.`);
+        setDemoExecutionType('RETRY');
+        setDemoExecutionCountdown(10);
+      } else {
+        setRetryScheduledMsg(`Auto-retry successfully locked for ${label}. Confirmation notice sent to ${targetEmail}.`);
+      }
     } catch (err) {
       console.error('Failed to schedule retry', err);
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
+  // Execute payment capture upon arrival of retry or PTP window
+  const handleExecuteSettlement = async () => {
+    if (!caseData) return;
+    setIsResolving(true);
+    const targetEmail = caseData.customer_email || 'your registered email';
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/triage/cases/${caseData.id}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resolution: 'RECOVERED',
+          notes: 'Customer authorized payment capture upon arrival of scheduled recovery window'
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setCaseData(updated);
+        setRetryWindowArrived(false);
+        await fetch('http://localhost:8080/api/v1/triage/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: caseData.customer_email,
+            case_id: caseData.id,
+            email_type: 'PAYMENT_RECEIPT',
+            notes: 'Payment confirmed upon scheduled capture'
+          })
+        });
+        setEmailPendingNotice(`Payment of ₹${caseData.amount_inr.toFixed(2)} confirmed and captured. Official receipt delivered to ${targetEmail}.`);
+      }
+    } catch (err) {
+      console.error('Failed to complete payment capture', err);
     } finally {
       setIsResolving(false);
     }
@@ -509,12 +661,18 @@ export const OrderStatusPage: React.FC = () => {
     if (!caseData) return;
     setIsResolving(true);
     const targetEmail = caseData.customer_email || 'your registered email';
+    const discPaise = Math.round(parseFloat(discountSavingsINR) * 100);
+    const recPaise = Math.round(parseFloat(discountedPriceINR) * 100);
     try {
       const res = await fetch(`http://localhost:8080/api/v1/triage/cases/${caseData.id}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resolution: 'RECOVERED',
+          discount_paise: discPaise,
+          discount_inr: parseFloat(discountSavingsINR),
+          recovered_amount_paise: recPaise,
+          recovered_amount_inr: parseFloat(discountedPriceINR),
           notes: `Customer claimed ${discountPercentStr} instant concession and completed settlement (₹${discountedPriceINR})`
         })
       });
@@ -624,6 +782,10 @@ export const OrderStatusPage: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setPtpResult(data);
+        if (data.promise_detected) {
+          setDemoExecutionType('PTP');
+          setDemoExecutionCountdown(10);
+        }
         await fetchCase();
       }
     } catch (err) {
@@ -690,8 +852,15 @@ export const OrderStatusPage: React.FC = () => {
     if (code === 'EXPIRED_CARD' || code === 'CARD_EXPIRED' || reason.includes('card_expired') || desc.includes('expired')) {
       return {
         title: 'Payment Card Expired',
-        explanation: 'This payment card validity date has passed. Permanent decline on dead instrument — automated retries permanently suspended by policy.',
+        explanation: 'This payment card validity date has passed. Permanent decline on dead instrument - automated retries permanently suspended by policy.',
         type: 'expired_card'
+      };
+    }
+    if (code === 'OVERDUE_INVOICE' || reason.includes('overdue') || desc.includes('overdue') || desc.includes('net-30')) {
+      return {
+        title: 'B2B Enterprise Invoice Overdue',
+        explanation: 'This enterprise invoice is past due under Net-30 credit terms. You can register a conversational Promise to Pay (PTP) date commitment or settle immediately.',
+        type: 'overdue_invoice'
       };
     }
     if (code === 'MANDATE_REVOKED' || code === 'LIMIT_EXCEEDED' || reason.includes('mandate') || desc.includes('mandate') || desc.includes('e-mandate') || desc.includes('limit')) {
@@ -824,7 +993,7 @@ export const OrderStatusPage: React.FC = () => {
               </h2>
               <p>
                 {isRecovered
-                  ? `Your payment of ₹${caseData.amount_inr.toFixed(2)} was successfully captured and transferred on-rail. Your AI Inference Credits Pack / subscription service has been fully provisioned.`
+                  ? `Your payment of ₹${settledAmountINR}${hasDiscountApplied ? ` (with ₹${discountSavingsFormatted} discount concession applied)` : ''} was successfully captured and transferred on-rail. Your AI Inference Credits Pack / subscription service has been fully provisioned.`
                   : isHumanResolved
                     ? `A retention specialist has reviewed this account and authorized settlement on alternative payment rails. Idempotent transfer captured on ledger.`
                     : isPromisedPending
@@ -876,23 +1045,31 @@ export const OrderStatusPage: React.FC = () => {
                 </div>
 
                 <h3 className="refusal-heading">
-                  {caseData.diagnosis?.root_cause === 'MANDATE_REVOKED' || caseData.error_code === 'MANDATE_REVOKED'
-                    ? 'Payment Authorization Is No Longer Active'
-                    : caseData.diagnosis?.root_cause === 'EXPIRED_CARD' || caseData.error_code === 'CARD_EXPIRED'
-                      ? 'This Card Cannot Be Safely Retried'
-                      : caseData.diagnosis?.root_cause === 'FRAUD_SUSPECTED'
-                        ? 'Security Anomaly Flagged — Retries Suspended'
-                        : 'No Automated Recovery Pathway Authorized'}
+                  {(caseData.attempts_made ?? 0) >= 3 || caseData.error_code === 'ATTEMPTS_EXHAUSTED' || caseData.intervention?.action === 'MARK_LOST_EXHAUSTED'
+                    ? 'Maximum Retry Attempts Reached (3/3 Stopping Rule)'
+                    : caseData.amount_inr >= 10000 || caseData.error_code === 'HIGH_VALUE_GATE' || caseData.intervention?.action === 'ESCALATE_HUMAN'
+                      ? 'Enterprise Account Escalated to Senior Retention Specialist'
+                      : caseData.diagnosis?.root_cause === 'MANDATE_REVOKED' || caseData.error_code === 'MANDATE_REVOKED'
+                        ? 'Payment Authorization Is No Longer Active'
+                        : caseData.diagnosis?.root_cause === 'EXPIRED_CARD' || caseData.error_code === 'CARD_EXPIRED'
+                          ? 'This Card Cannot Be Safely Retried'
+                          : caseData.diagnosis?.root_cause === 'FRAUD_SUSPECTED' || caseData.error_code === 'FRAUD_SUSPECTED'
+                            ? 'Security Anomaly Flagged - Retries Suspended'
+                            : 'No Automated Recovery Pathway Authorized'}
                 </h3>
 
                 <p className="refusal-desc">
-                  {caseData.diagnosis?.root_cause === 'MANDATE_REVOKED' || caseData.error_code === 'MANDATE_REVOKED'
-                    ? 'Triage identified that the recurring payment mandate on file has been revoked at your bank. Our deterministic policy engine has halted automated debits to prevent unauthorized charge attempts.'
-                    : caseData.diagnosis?.root_cause === 'EXPIRED_CARD' || caseData.error_code === 'CARD_EXPIRED'
-                      ? 'This payment card validity date has passed. Our deterministic policy engine has permanently halted automated retry cycles to protect against issuing bank penalty fees and card lockouts.'
-                      : caseData.diagnosis?.root_cause === 'FRAUD_SUSPECTED'
-                        ? 'This transaction triggered our safety risk scoring gate. Automated processing is permanently halted pending risk specialist review.'
-                        : 'Triage evaluated this decline telemetry and determined that no automated financial recovery action is authorized under current policy constraints.'}
+                  {(caseData.attempts_made ?? 0) >= 3 || caseData.error_code === 'ATTEMPTS_EXHAUSTED' || caseData.intervention?.action === 'MARK_LOST_EXHAUSTED'
+                    ? 'Triage enforces a deterministic stopping rule after 3 failed attempts. Automated retries and customer outreach have ceased to prevent notification fatigue and comply with recovery guidelines.'
+                    : caseData.amount_inr >= 10000 || caseData.error_code === 'HIGH_VALUE_GATE' || caseData.intervention?.action === 'ESCALATE_HUMAN'
+                      ? 'Transactions at or above ₹10,000 bypass automated bot dunning and route directly to our Senior Retention Desk for white-glove manual review and tailored billing assistance.'
+                      : caseData.diagnosis?.root_cause === 'MANDATE_REVOKED' || caseData.error_code === 'MANDATE_REVOKED'
+                        ? 'Triage identified that the recurring payment mandate on file has been revoked at your bank. Our deterministic policy engine has halted automated debits to prevent unauthorized charge attempts.'
+                        : caseData.diagnosis?.root_cause === 'EXPIRED_CARD' || caseData.error_code === 'CARD_EXPIRED'
+                          ? 'This payment card validity date has passed. Our deterministic policy engine has permanently halted automated retry cycles to protect against issuing bank penalty fees and card lockouts.'
+                          : caseData.diagnosis?.root_cause === 'FRAUD_SUSPECTED' || caseData.error_code === 'FRAUD_SUSPECTED'
+                            ? 'This transaction triggered our safety risk scoring gate. Automated processing is permanently halted pending risk specialist review.'
+                            : 'Triage evaluated this decline telemetry and determined that no automated financial recovery action is authorized under current policy constraints.'}
                 </p>
 
                 <div className="refusal-rules-card">
@@ -1231,6 +1408,14 @@ export const OrderStatusPage: React.FC = () => {
                           </div>
 
                           <div className="retry-schedule-grid" style={isRetryConfirmed ? { pointerEvents: 'none', opacity: 0.75 } : undefined}>
+                            <div
+                              onClick={() => !isRetryConfirmed && setSelectedRetryWindow('10_seconds')}
+                              className={`retry-time-card ${selectedRetryWindow === '10_seconds' ? 'selected' : ''}`}
+                            >
+                              <div className="retry-time-title">In 10 Seconds (Demo)</div>
+                              <div className="retry-time-sub">Simulated clearing window - dispatches authorization link in 10s</div>
+                            </div>
+
                             {isPayday ? (
                               <>
                                 <div
@@ -1309,7 +1494,7 @@ export const OrderStatusPage: React.FC = () => {
                                 }}
                               >
                                 <CheckCircle2 size={18} color="#137333" />
-                                <span>✓ Auto-Retry Scheduled &amp; Locked ({selectedLabel})</span>
+                                <span>Auto-Retry Scheduled &amp; Locked ({selectedLabel})</span>
                               </button>
 
                               <div style={{
@@ -1334,6 +1519,85 @@ export const OrderStatusPage: React.FC = () => {
                                   <span>•</span>
                                   <span>PIPELINE: {getActionDisplayLabel(caseData.intervention?.action || (isPayday ? 'RETRY_NEXT_PAYDAY_WINDOW' : 'RETRY_SAME_RAIL_COOLDOWN'), caseData.status).toUpperCase()}</span>
                                 </div>
+
+                                {demoExecutionCountdown !== null && demoExecutionType === 'RETRY' && (
+                                  <div style={{
+                                    marginTop: '0.75rem',
+                                    padding: '0.65rem 0.85rem',
+                                    background: '#F0FDF4',
+                                    border: '1.5px solid #10B981',
+                                    borderRadius: '6px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '10px',
+                                    color: '#065F46'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 600 }}>
+                                      <Clock size={14} color="#059669" />
+                                      <span>[DEMO ACCELERATION]: Simulating arrival of scheduled retry date (for demo only)</span>
+                                    </div>
+                                    <div style={{
+                                      background: '#047857',
+                                      color: '#FFFFFF',
+                                      fontWeight: 700,
+                                      fontSize: '0.82rem',
+                                      padding: '2px 8px',
+                                      borderRadius: '4px',
+                                      fontFamily: 'monospace'
+                                    }}>
+                                      Dispatches in {demoExecutionCountdown}s
+                                    </div>
+                                  </div>
+                                )}
+
+                                {retryWindowArrived && (
+                                  <div style={{
+                                    marginTop: '0.75rem',
+                                    padding: '0.85rem 1rem',
+                                    background: '#FFFFFF',
+                                    border: '2px solid #16A34A',
+                                    borderRadius: '6px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.5rem'
+                                  }}>
+                                    <div style={{ color: '#15803D', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <CheckCircle2 size={16} color="#15803D" />
+                                      <span>Scheduled Window Arrived - Authorization Link Delivered</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.82rem', color: '#1E293B', lineHeight: 1.4 }}>
+                                      A secure payment link was sent to <strong>{caseData.customer_email || 'your email'}</strong>. Click below (or link in email) to capture payment:
+                                    </div>
+                                    <button
+                                      className="btn-primary"
+                                      onClick={handleExecuteSettlement}
+                                      disabled={isResolving}
+                                      style={{
+                                        background: '#16A34A',
+                                        borderColor: '#15803D',
+                                        marginTop: '0.25rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px',
+                                        fontWeight: 700
+                                      }}
+                                    >
+                                      {isResolving ? (
+                                        <>
+                                          <RefreshCw className="spinner" size={16} />
+                                          <span>Finalizing Payment Capture...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle2 size={16} />
+                                          <span>Complete Payment Capture Now (₹{caseData.amount_inr.toFixed(2)})</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </>
                           ) : (
@@ -1372,7 +1636,7 @@ export const OrderStatusPage: React.FC = () => {
                             Dual-Gated Concession · Gate 1: Solvency Bridge &bull; Gate 2: Knapsack Budget Allocated {mlProbability ? `· ${(mlProbability * 100).toFixed(1)}% Recovery Probability` : ''}
                           </div>
                           <div className="ml-callout-desc">
-                            1) <strong>Gate 1 (Eligibility):</strong> Available balance (₹{availableBalance !== undefined ? availableBalance.toFixed(0) : discountedPriceINR}) mathematically clears the net payable amount (₹{discountedPriceINR}).<br/>
+                            1) <strong>Gate 1 (Eligibility):</strong> Available balance (₹{availableBalance !== undefined ? availableBalance.toFixed(0) : discountedPriceINR}) mathematically clears the net payable amount (₹{discountedPriceINR}).<br />
                             2) <strong>Gate 2 (Knapsack Budget):</strong> This case ranked in the top marginal ERV density (ΔEV / cost) slots of the merchant daily concession pool.
                           </div>
                         </div>
@@ -1484,6 +1748,8 @@ export const OrderStatusPage: React.FC = () => {
                     {/* Fast Click Templates */}
                     <div className="quick-chips-row">
                       {[
+                        'Debit in 10 seconds (Demo)',
+                        'main 5 tarik ko pay kar dunga',
                         'Pay tomorrow at 10 AM',
                         'Debit on 5th after salary',
                         'Haan next Monday ko karunga',
@@ -1534,6 +1800,85 @@ export const OrderStatusPage: React.FC = () => {
                             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
                               <strong>PTP &ne; Recovered Revenue:</strong> Commitment registered in SHA-256 ledger. Recovered revenue strictly increases only upon confirmed payment capture on {ptpResult.promised_date}.
                             </div>
+
+                            {demoExecutionCountdown !== null && demoExecutionType === 'PTP' && (
+                              <div style={{
+                                marginTop: '0.5rem',
+                                padding: '0.65rem 0.85rem',
+                                background: '#F0FDF4',
+                                border: '1.5px solid #10B981',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '10px',
+                                color: '#065F46'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 600 }}>
+                                  <Clock size={14} color="#059669" />
+                                  <span>[DEMO ACCELERATION]: Simulating arrival of promised payment date (for demo only)</span>
+                                </div>
+                                <div style={{
+                                  background: '#047857',
+                                  color: '#FFFFFF',
+                                  fontWeight: 700,
+                                  fontSize: '0.82rem',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontFamily: 'monospace'
+                                }}>
+                                  Dispatches in {demoExecutionCountdown}s
+                                </div>
+                              </div>
+                            )}
+
+                            {retryWindowArrived && (
+                              <div style={{
+                                marginTop: '0.75rem',
+                                padding: '0.85rem 1rem',
+                                background: '#FFFFFF',
+                                border: '2px solid #16A34A',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.5rem'
+                              }}>
+                                <div style={{ color: '#15803D', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <CheckCircle2 size={16} color="#15803D" />
+                                  <span>Promised Date Arrived - 1-Click Authorization Link Delivered</span>
+                                </div>
+                                <div style={{ fontSize: '0.82rem', color: '#1E293B', lineHeight: 1.4 }}>
+                                  A secure payment capture link was dispatched to <strong>{caseData.customer_email || 'your email'}</strong>. Click below (or link in email) to capture payment:
+                                </div>
+                                <button
+                                  className="btn-primary"
+                                  onClick={handleExecuteSettlement}
+                                  disabled={isResolving}
+                                  style={{
+                                    background: '#16A34A',
+                                    borderColor: '#15803D',
+                                    marginTop: '0.25rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    fontWeight: 700
+                                  }}
+                                >
+                                  {isResolving ? (
+                                    <>
+                                      <RefreshCw className="spinner" size={16} />
+                                      <span>Finalizing Payment Capture...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 size={16} />
+                                      <span>Complete Payment Capture Now (₹{caseData.amount_inr.toFixed(2)})</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--danger-color)', fontSize: '0.85rem' }}>
@@ -1706,7 +2051,12 @@ export const OrderStatusPage: React.FC = () => {
               </div>
               <div className="solution-message">
                 <p style={{ fontWeight: 700, color: 'var(--accent-color)', fontSize: '1.05rem' }}>
-                  ₹{caseData.amount_inr.toFixed(2)} Successfully Transferred &amp; Captured
+                  ₹{settledAmountINR} Successfully Transferred &amp; Captured
+                  {hasDiscountApplied && (
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500, marginLeft: '8px' }}>
+                      (Original ₹{caseData.amount_inr.toFixed(2)} &bull; -₹{discountSavingsFormatted} Concession)
+                    </span>
+                  )}
                 </p>
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.4rem', fontFamily: 'monospace' }}>
                   Payment ID: <strong>{caseData.razorpay_payment_id || `pay_1click_${caseData.id.toLowerCase()}`}</strong> • Settlement: Confirmed on Alternative Rail • Ledger: Verified SHA-256

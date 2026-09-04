@@ -13,6 +13,8 @@ import {
   AlertOctagon,
   User,
   ShieldCheck,
+  ShieldAlert,
+  UserCheck,
   type LucideIcon
 } from 'lucide-react';
 
@@ -28,20 +30,20 @@ interface Plan {
 }
 
 const plans: Plan[] = [
-  {
-    id: 'compute_pack',
-    name: 'AI Inference Credits Pack',
-    desc: 'Prepaid 10M token compute package with burst priority and real-time fallbacks',
-    pricePaise: 180000,
-    displayPrice: '1,800',
-    period: 'one-time pack',
-    features: [
-      '10,000,000 Model Tokens',
-      'Low latency P99 inference',
-      'Multi-region burst routing',
-      'Real-time token usage alerts'
-    ]
-  },
+  // {
+  //   id: 'compute_pack',
+  //   name: 'AI Inference Credits Pack',
+  //   desc: 'Prepaid 10M token compute package with burst priority and real-time fallbacks',
+  //   pricePaise: 180000,
+  //   displayPrice: '1,800',
+  //   period: 'one-time pack',
+  //   features: [
+  //     '10,000,000 Model Tokens',
+  //     'Low latency P99 inference',
+  //     'Multi-region burst routing',
+  //     'Real-time token usage alerts'
+  //   ]
+  // },
   {
     id: 'gpu_node',
     name: 'H100 On-Demand GPU Node',
@@ -49,7 +51,6 @@ const plans: Plan[] = [
     pricePaise: 360000,
     displayPrice: '3,600',
     period: '24-hour block',
-    featured: true,
     features: [
       '1x NVIDIA H100 80GB SXM5',
       '3.2 Tbps InfiniBand interconnect',
@@ -64,6 +65,7 @@ const plans: Plan[] = [
     pricePaise: 480000,
     displayPrice: '4,800',
     period: 'monthly tier',
+    featured: true,
     features: [
       '8x H100 SXM5 GPU cluster',
       'SLA-backed 99.95% uptime',
@@ -123,6 +125,17 @@ const failureScenarios: FailureScenario[] = [
     description: 'Issuing bank network error: bank server did not respond in time'
   },
   {
+    id: 'overdue_invoice',
+    title: 'B2B Overdue Enterprise Invoice (Net-30)',
+    desc: 'Simulates enterprise Net-30 invoice non-payment past due date. Triggers conversational Promise to Pay (PTP) recovery.',
+    icon: Building2,
+    code: 'OVERDUE_INVOICE',
+    reason: 'invoice_overdue',
+    source: 'corporate_billing',
+    step: 'invoice_due_date',
+    description: 'B2B enterprise invoice payment past due date under Net-30 credit terms.'
+  },
+  {
     id: 'auth_timeout',
     title: '3D-Secure / OTP Timeout',
     desc: 'Simulates customer dropping out or 3DS verification window timing out',
@@ -136,13 +149,24 @@ const failureScenarios: FailureScenario[] = [
   {
     id: 'mandate_limit',
     title: 'Mandate Limit Exceeded',
-    desc: 'Simulates recurring subscription debit hitting RBI per-transaction ceiling',
+    desc: 'Simulates single transaction exceeding per-debit autopay ceiling. Mandate remains active — One-Time UPI dominant.',
     icon: Lock,
-    code: 'LIMIT_EXCEEDED',
+    code: 'MANDATE_LIMIT',
     reason: 'mandate_max_amount_breached',
     source: 'bank',
     step: 'payment_initiation',
-    description: 'Auto-debit request exceeds maximum registered e-mandate limit of ₹15,000'
+    description: 'Auto-debit request exceeds maximum registered per-debit e-mandate limit of ₹15,000. Recurring mandate remains active.'
+  },
+  {
+    id: 'mandate_revoked',
+    title: 'Mandate Revoked / Cancelled at Bank',
+    desc: 'Simulates recurring subscription autopay mandate cancelled at bank. Requires 1-click mandate re-authorization.',
+    icon: Lock,
+    code: 'MANDATE_REVOKED',
+    reason: 'mandate_cancelled_at_bank',
+    source: 'bank',
+    step: 'payment_authorization',
+    description: 'Recurring autopay mandate was paused or cancelled at destination bank.'
   },
   {
     id: 'expired_card',
@@ -154,6 +178,39 @@ const failureScenarios: FailureScenario[] = [
     source: 'bank',
     step: 'payment_initiation',
     description: 'The card expiry date has passed. Permanent decline on dead instrument'
+  },
+  {
+    id: 'fraud_suspected',
+    title: 'Suspected Fraud & Velocity Anomaly',
+    desc: 'Simulates security velocity anomaly. Policy triggers deterministic STOP veto with zero automated retries.',
+    icon: ShieldAlert,
+    code: 'FRAUD_SUSPECTED',
+    reason: 'fraud_velocity_risk',
+    source: 'risk',
+    step: 'payment_authentication',
+    description: 'Card velocity threshold breached across rapid IP hops. Security stop triggered.'
+  },
+  {
+    id: 'high_value_escalation',
+    title: 'High-Value Policy Gate (≥₹10k)',
+    desc: 'Simulates high-value transaction decline. Bypasses automated dunning and routes directly to Senior Retention Desk.',
+    icon: UserCheck,
+    code: 'HIGH_VALUE_GATE',
+    reason: 'high_value_review_required',
+    source: 'bank',
+    step: 'payment_authorization',
+    description: 'Transaction exceeds ₹10,000 automated ceiling. Assigned to specialist desk.'
+  },
+  {
+    id: 'max_attempts_exhausted',
+    title: 'Max Attempts Exhausted (3/3 Stopping Rule)',
+    desc: 'Simulates repeated failure on final attempt. Deterministic stopping rule halts dunning and marks case lost.',
+    icon: AlertOctagon,
+    code: 'ATTEMPTS_EXHAUSTED',
+    reason: 'attempts_exhausted',
+    source: 'gateway',
+    step: 'payment_authorization',
+    description: 'Customer reached maximum 3 retry attempts. Automated recovery ceased.'
   }
 ];
 
@@ -309,6 +366,27 @@ export default function ProductPage() {
                 </button>
               </div>
 
+              {/* Link to trigger B2B Overdue Invoice Flow 
+              <Link
+                to="/invoice/8841"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  border: '1px solid #FDE68A'
+                }}
+              >
+                <Building2 size={14} />
+                <span>B2B Overdue Invoice</span>
+              </Link> */}
+
               <Link
                 to="/portal"
                 style={{
@@ -377,7 +455,7 @@ export default function ProductPage() {
               </button>
 
               {/* <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.4, background: 'var(--surface-subtle)', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>
-                <strong style={{ color: 'var(--accent-color)' }}>⚡ Real Outbound Email:</strong> Live SMTP emails with 1-click recovery links are dispatched directly to real personal/work inboxes (e.g. Gmail / Outlook). Demo accounts (<code>@example.com</code>) run in simulation mode.
+                <strong style={{ color: 'var(--accent-color)' }}>Real Outbound Email:</strong> Live SMTP emails with 1-click recovery links are dispatched directly to real personal/work inboxes (e.g. Gmail / Outlook). Demo accounts (<code>@example.com</code>) run in simulation mode.
               </div> */}
             </form>
 

@@ -11,6 +11,8 @@ export interface TriageCaseLike {
   next_retry_at?: string;
   due_at?: string;
   payday_proximity_days?: number;
+  attempts_made?: number;
+  max_attempts?: number;
   ptp_status?: {
     promise_detected?: boolean;
     promised_date?: string;

@@ -25,6 +25,8 @@ interface TriageCase {
   plan_name: string;
   amount_inr: number;
   amount_paise: number;
+  recovered_amount_paise?: number;
+  incentive_discount_paise?: number;
   original_rail: string;
   error_code: string;
   error_desc: string;
@@ -35,6 +37,8 @@ interface TriageCase {
   due_at?: string;
   notes?: string;
   payday_proximity_days?: number;
+  attempts_made?: number;
+  max_attempts?: number;
   razorpay_payment_id?: string;
   diagnosis?: {
     root_cause: string;
@@ -110,7 +114,7 @@ export const CustomerPortalPage: React.FC = () => {
     // Extract name from matching case or email address
     const matchingCase = allCases.find(
       c => (c.customer_email && c.customer_email.toLowerCase() === cleanEmail) ||
-           (c.customer_name && c.customer_name.toLowerCase().includes(cleanEmail.split('@')[0]))
+        (c.customer_name && c.customer_name.toLowerCase().includes(cleanEmail.split('@')[0]))
     );
 
     let name = '';
@@ -204,7 +208,7 @@ export const CustomerPortalPage: React.FC = () => {
         return (
           <span className="portal-status-chip retry" title={`Auto-retry scheduled for ${scheduledDate}`}>
             <Clock size={12} />
-            <span>Retry scheduled — {scheduledDate}</span>
+            <span>Retry scheduled - {scheduledDate}</span>
           </span>
         );
       }
@@ -219,7 +223,7 @@ export const CustomerPortalPage: React.FC = () => {
         return (
           <span className="portal-status-chip failed" title="Auto-retry attempt failed">
             <AlertTriangle size={12} />
-            <span>Retry failed — action needed</span>
+            <span>Retry failed - action needed</span>
           </span>
         );
       case 'PTP_COMMITTED': {
@@ -227,7 +231,7 @@ export const CustomerPortalPage: React.FC = () => {
         return (
           <span className="portal-status-chip ptp" title={`Promise to pay registered for ${promiseDate}`}>
             <Calendar size={12} />
-            <span>Promise to pay — due {promiseDate}</span>
+            <span>Promise to pay - due {promiseDate}</span>
           </span>
         );
       }
@@ -326,7 +330,7 @@ export const CustomerPortalPage: React.FC = () => {
               </button>
 
               <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.4, background: 'var(--surface-subtle)', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>
-                <strong style={{ color: 'var(--accent-color)' }}>⚡ Live Outbound Email Active:</strong> Real statements &amp; payment links are dispatched directly to real email inboxes (e.g. Gmail/Outlook). Demo accounts (<code>@example.com</code>) operate in simulation sandbox.
+                <strong style={{ color: 'var(--accent-color)' }}>Live Outbound Email Active:</strong> Real statements &amp; payment links are dispatched directly to real email inboxes (e.g. Gmail/Outlook). Demo accounts (<code>@example.com</code>) operate in simulation sandbox.
               </div>
             </form>
 
@@ -548,8 +552,13 @@ export const CustomerPortalPage: React.FC = () => {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ fontWeight: 700, color: 'var(--accent-color)', display: 'block' }}>
-                          ₹{c.amount_inr ? c.amount_inr.toFixed(2) : (c.amount_paise / 100).toFixed(2)}
+                          ₹{c.recovered_amount_paise ? (c.recovered_amount_paise / 100).toFixed(2) : (c.amount_inr ? c.amount_inr.toFixed(2) : (c.amount_paise / 100).toFixed(2))}
                         </span>
+                        {(c.incentive_discount_paise || 0) > 0 && (
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>
+                            (-₹{((c.incentive_discount_paise || 0) / 100).toFixed(0)} discount)
+                          </span>
+                        )}
                         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>PAID &bull; ACTIVE</span>
                       </div>
                     </div>
