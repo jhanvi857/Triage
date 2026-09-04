@@ -349,7 +349,7 @@ def run_scenario_4_network_timeout_idempotency(agent: AIBuyerAgent):
         idempotency_key=shared_idem_key,
         simulate_timeout=True
     )
-    print(f"{YELLOW} ⚡ Network Exception: HTTP {res1.get('http_status', 'Timeout')} - Connection dropped!{RESET}")
+    print(f"{YELLOW} Network Exception: HTTP {res1.get('http_status', 'Timeout')} - Connection dropped!{RESET}")
 
     # Attempt 2: Replays with SAME idempotency key
     agent.log_thought("Attempt 2: Client detected timeout. Retrying request with the EXACT SAME idempotency key...")

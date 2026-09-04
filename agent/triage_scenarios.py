@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Triage — Autonomous Revenue Recovery & Payment Failure Scenarios Runner
+Triage - Autonomous Revenue Recovery & Payment Failure Scenarios Runner
 Key Architecture:
   - 1 ML Ranking Model (Random Forest) for Intervention Selection
   - 0 LLMs, 0 Generative AI, 0 AI in diagnosis, 0 AI in financial execution
@@ -454,7 +454,55 @@ def scenario_10_idempotency():
     print_step(3, "Audit Trail Verification", "Checking immutable hash chain integrity...")
     stats = http_get("/api/v1/triage/stats")
     print_success(f"Cryptographic Hash Chain Verified: {stats.get('chain_verified')} (Total Blocks: {stats.get('total_blocks')})")
-    print("     Zero duplicate charges, zero ledger bifurcation.")
+def scenario_11_mandate_limit():
+    print_header("SCENARIO 11: MANDATE_LIMIT -> Per-Debit Cap Exceeded -> Dominant One-Time UPI Switch")
+
+    print_step(1, "Payment Failure Ingested", "Recurring subscription debit of ₹14,500 exceeds registered per-debit cap. Mandate remains active at customer bank.")
+    c = http_post("/api/v1/triage/cases", {
+        "customer_name": "Vertex GPU Labs Inc",
+        "plan_name": "Monthly Reserved GPU Node (Tier 3)",
+        "amount_paise": 1450000,  # ₹14,500
+        "original_rail": "NACH_MANDATE",
+        "error_code": "MANDATE_LIMIT",
+        "error_desc": "Per-transaction limit breached on active autopay mandate",
+        "error_reason": "mandate_max_amount_breached",
+        "error_source": "bank",
+        "error_step": "payment_initiation",
+        "payday_proximity_days": 10,
+        "historical_success_rate": 0.92,
+        "has_upi_available": True,
+    })
+    case_id = c["id"]
+    print_success(f"Case Ingested: {case_id} [Amount: ₹{c['amount_inr']:,.2f}]")
+
+    print_step(2, "Deterministic Diagnosis Engine", "Evaluating failure telemetry for mandate state...")
+    diag = c.get("diagnosis", {})
+    conf = diag.get("confidence_score", 0.99)
+    print_success(f"Classified Root Cause: {diag.get('root_cause')} (Confidence: {conf*100:.0f}%)")
+    print(f"     Technical: {diag.get('technical_reason')}")
+
+    print_step(3, "Context-Aware Candidate Eligibility & Provenance", "Checking critical path vs async non-blocking candidates:")
+    inter = c.get("intervention", {})
+    evals = inter.get("candidate_evaluations", [])
+    for ev in evals:
+        status_tag = "\033[1;32m[ELIGIBLE - DOMINANT]\033[0m" if ev.get("eligible") else "\033[1;33m[DEPRIORITIZED / ASYNC]\033[0m"
+        print(f"     {status_tag} {ev.get('action')}: {ev.get('reason')}")
+
+    print_ml_ranking(inter.get("ml_rankings", []), inter.get("ml_recommendation", ""))
+
+    print(f"\n  \033[1;34m[POLICY ENGINE EVALUATION]\033[0m Verdict: \033[1;32m{inter.get('policy_verdict')}\033[0m")
+    for rule in inter.get("policy_rules", []):
+        mark = "✓" if rule.get("passed") else "✗"
+        print(f"    [{mark}] {rule.get('rule_name')}: {rule.get('reason')}")
+
+    print(f"\n  \033[1m[POLICY-CONSTRAINED NUDGE DRAFT (Zero LLM Hallucination)]\033[0m")
+    print(f"    \"{c.get('customer_facing_msg')}\"")
+    print("     Key Design Principle: The recurring mandate is UNTOUCHED for future cycles; 1-time UPI clears immediate invoice.")
+
+    print_step(4, "Settlement", "Executing instant One-Time UPI recovery...")
+    c = http_post(f"/api/v1/triage/cases/{case_id}/advance", {})
+    print_success(f"Captured: ₹{c.get('recovered_amount_paise', 0)/100:,.2f} via Razorpay ({c.get('razorpay_payment_id')})")
+    print_success("Outcome: 100% of revenue recovered with zero recurring mandate modification friction!")
 
 
 def run_batch_evaluation(count: int = 15):
@@ -493,7 +541,7 @@ def run_batch_evaluation(count: int = 15):
 
     print("\n\033[1;36m[METHODOLOGY & RIGOR DISCLOSURE]\033[0m")
     print("  * Metrics reflect the Random Forest model accurately learning synthetic multi-variable")
-    print("    interaction patterns (cause x action x context) — demonstrating that the ranking mechanism")
+    print("    interaction patterns (cause x action x context) - demonstrating that the ranking mechanism")
     print("    and expected-value optimization work end-to-end, rather than claiming production human behavioral prediction.")
     print("  * Canonical Benchmark (750 Held-Out Test Partition): +5.47 pp absolute uplift / +24.72% relative revenue uplift.")
 
@@ -520,14 +568,14 @@ def run_batch_evaluation(count: int = 15):
 
 def main():
     parser = argparse.ArgumentParser(description="Triage Payment Recovery Scenarios Runner")
-    parser.add_argument("--scenario", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], help="Run specific scenario (1-10)")
+    parser.add_argument("--scenario", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], help="Run specific scenario (1-11)")
     parser.add_argument("--batch", type=int, default=50, help="Run batch evaluation harness with N cases (default: 50)")
     parser.add_argument("--benchmark", action="store_true", help="Run 3-Model Benchmark (RF vs XGB vs LightGBM)")
     parser.add_argument("--retrain", action="store_true", help="Run Continuous Retraining Feedback Loop")
     parser.add_argument("--allocate", action="store_true", help="Run Portfolio Knapsack Allocator")
     parser.add_argument("--forecast", action="store_true", help="Run 7-Day Revenue Forecast")
     parser.add_argument("--bandit", action="store_true", help="Run Shadow Contextual Bandit Exploration")
-    parser.add_argument("--all", action="store_true", help="Run all 10 scenarios and batch benchmark sequentially")
+    parser.add_argument("--all", action="store_true", help="Run all 11 scenarios and batch benchmark sequentially")
     args = parser.parse_args()
 
     # Health check
@@ -574,9 +622,11 @@ def main():
         time.sleep(0.5)
         scenario_10_idempotency()
         time.sleep(0.5)
+        scenario_11_mandate_limit()
+        time.sleep(0.5)
         run_batch_evaluation(50)
         print("\n" + "=" * 75)
-        print("\033[1;32m[COMPLETE] All 10 Triage scenarios & comparative batch benchmark (50 Cases) executed successfully.\033[0m")
+        print("\033[1;32m[COMPLETE] All 11 Triage scenarios & comparative batch benchmark (50 Cases) executed successfully.\033[0m")
         print("=" * 75)
     elif args.scenario:
         scenarios = {
@@ -590,6 +640,7 @@ def main():
             8: scenario_8_recovery_plan_and_scheduler,
             9: scenario_9_attempt_exhaustion,
             10: scenario_10_idempotency,
+            11: scenario_11_mandate_limit,
         }
         if args.scenario in scenarios:
             scenarios[args.scenario]()

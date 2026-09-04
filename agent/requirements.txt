@@ -1,4 +1,4 @@
-# Triage Revenue Recovery — ML & Benchmark Suite dependencies
+# Triage Revenue Recovery - ML & Benchmark Suite dependencies
 scikit-learn>=1.5.0
 joblib>=1.4.0
 numpy>=1.26.0
