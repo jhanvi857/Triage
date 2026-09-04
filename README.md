@@ -1,12 +1,11 @@
 # Triage - Cross-Workflow AI Revenue Recovery Control Plane
 
-> **Autonomous AI revenue recovery control plane that diagnoses payment failures, dynamically times retries to customer liquidity windows, de-conflicts multi-surface dunning, and executes bounded recoveries with an immutable SHA-256 cryptographic audit trail.**
-
----
-
-## Demo & Architecture Walkthrough
-
 [![Watch Triage Demo Video](https://img.shields.io/badge/Demo%20Video-Watch%20Walkthrough-blue?style=for-the-badge&logo=youtube)](https://drive.google.com/file/d/1uh3zhQRknUTt3QNnbQC6lrApSMwpoHKB/view?usp=sharing)
+[![Go Backend](https://img.shields.io/badge/Go%20Gateway-%3C1ms%20ML%20Inference-00ADD8?style=for-the-badge&logo=go)](https://golang.org)
+[![Audit Ledger](https://img.shields.io/badge/Audit%20Ledger-SHA--256%20Cryptographic%20Chain-black?style=for-the-badge)](https://github.com/jhanvi857/Triage)
+[![Deterministic Engine](https://img.shields.io/badge/Diagnosis-0%20AI%20Hallucination-success?style=for-the-badge)](https://github.com/jhanvi857/Triage)
+
+> **Autonomous cross-workflow AI revenue recovery control plane that diagnoses payment failures, dynamically times retries to customer liquidity windows, de-conflicts multi-surface dunning, and executes bounded recoveries with an immutable SHA-256 cryptographic audit trail.**
 
 ---
 
@@ -22,11 +21,33 @@
 | **6** | **Cryptographic Audit Ledger & Provenance** | **Ephemeral webhook retries**: [Razorpay Webhooks](https://razorpay.com/docs/webhooks/) retries payloads on a 24-hr backoff and disables if failing; lacks an immutable, cryptographic hash-chained audit trail. | **SHA-256 Audit Ledger**: Cryptographically hash-chained ledger storing state transitions, idempotency keys, and tamper-evident financial receipts over real-time SSE. |
 | **7** | **Counterfactual Uplift Benchmark** | **Aggregate volume metrics**: Standard reports provide gross volume distribution and exportable transaction logs; public documentation describes no causal counterfactual policy benchmarking framework. | **3-Model Benchmark Harness**: Evaluates Ledger AI vs. Static Rule vs. Random Policy under identical held-out Bernoulli conditions, proving net recovery uplift ($p < 0.001$). |
 
+---
 
+## 2. Executive Overview: The 4 Core Problems Triage Solves
+
+Digital merchants and subscription platforms lose **3% to 7% of gross revenue** to payment friction and uncoordinated dunning. Standard payment gateways process transactions efficiently, but handle declines via isolated product silos and static daily retry schedules.
+
+### The 4 Real-World Failures & Triage Solutions:
+
+1. **Blind Retries on Empty Accounts**:
+   * *Problem*: Standard retries hit accounts on fixed calendar days (T+1, T+2), exhausting attempt quotas while the customer's account is still empty.
+   * *Solution*: **Payday-Aware Adaptive Sequencer** detects customer salary/funding windows (<= 3 days) and locks auto-retries into the liquidity window when funds actually arrive.
+
+2. **Dunning Collisions & Notification Fatigue**:
+   * *Problem*: A single customer with a dropped cart, a failed subscription, and an overdue B2B invoice receives competing, disjoint dunning emails in the same hour.
+   * *Solution*: **Centralized Customer Entity** enforces a mandatory **4-hour global contact cooldown** and value-ranked dunning suppression (prioritizing higher-value recoveries).
+
+3. **Margin Burn from Blind Discounts**:
+   * *Problem*: Flat discount links burn profit margin on customers who either do not need them or whose balance gap is too wide to close.
+   * *Solution*: **Dual-Gated Knapsack Concession Engine** authorizes discounts *only* if the concession mathematically closes the shortfall (`balance >= amount - concession`) and fits the daily portfolio budget.
+
+4. **Conversational Commitments Ignored**:
+   * *Problem*: Customers explaining payment delays (e.g., *"5 tarik ko kar dunga"*) are treated as lost leads by automated systems.
+   * *Solution*: **Hinglish NLP Promise-to-Pay (PTP) Engine** parses conversational commitments into stateful cron recovery schedules.
 
 ---
 
-## 2. End-to-End Decision Flow & Authority Pipeline
+## 3. End-to-End Decision Flow & Authority Pipeline
 
 Triage runs a strict 5-stage authority pipeline separating non-authoritative communication from authoritative idempotent execution. **ML decisions run directly inside the Go Gateway via an embedded Random Forest inference engine (<1ms latency)** with zero external dependencies:
 
@@ -123,7 +144,7 @@ Triage runs a strict 5-stage authority pipeline separating non-authoritative com
 
 ---
 
-## 3. Cross-Surface Failure Scenarios & Resolutions
+## 4. Cross-Surface Failure Scenarios & Resolutions
 
 Every failure scenario maps to a deterministic eligibility envelope. Discounts and concessions are strictly gated and never offered outside their justified mathematical boundary.
 
@@ -145,7 +166,7 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 
 ---
 
-## 4. Key Architectural Decisions
+## 5. Key Architectural Decisions
 
 ### Decision 1: The Dual-Gated Solvency Concession Engine
 * **The Problem**: Static or unconstrained discounting burns margin on customers who either do not need it or where the gap is too wide to close.
@@ -183,7 +204,7 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 
 ---
 
-## 5. Build Challenges & Technical Obstacles
+## 6. Build Challenges & Technical Obstacles
 
 * **1. Eliminating AI Hallucination in Financial Decisioning**
   * *Obstacle:* Relying on generative AI for diagnosing payment failures caused non-deterministic advice (e.g., proposing retries on expired cards or unauthorized discounts).
@@ -211,7 +232,7 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 
 ---
 
-## 6. Bounded State Machine & Test Suite
+## 7. Bounded State Machine & Test Suite
 
 ### Bounded State Machine
 
@@ -263,7 +284,7 @@ python triage_scenarios.py --all
 
 ---
 
-## 7. Quickstart (Local Setup)
+## 8. Quickstart (Local Setup)
 
 ### 1. Configure Environment:
 ```bash
