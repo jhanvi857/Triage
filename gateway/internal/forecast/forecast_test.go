@@ -9,7 +9,7 @@ import (
 
 func TestForecastEngine_7DayProjectionCalculations(t *testing.T) {
 	engine := NewEngine()
-	engine.SetRates(59.33, 54.40)
+	engine.SetRates(68.15, 61.33)
 
 	cases := []*recovery.Case{
 		{

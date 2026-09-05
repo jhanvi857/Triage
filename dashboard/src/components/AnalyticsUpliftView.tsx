@@ -152,10 +152,10 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
                 <td className="py-3 px-4 text-center font-mono text-[#6F7777]">Static Heuristic</td>
                 <td className="py-3 px-4 text-center font-mono text-[#6F7777]">N/A</td>
                 <td className="py-3 px-4 text-center font-mono text-[#6F7777]">N/A</td>
-                <td className="py-3 px-4 text-right font-mono text-[#202525]">54.40%</td>
+                <td className="py-3 px-4 text-right font-mono text-[#202525]">61.33%</td>
                 <td className="py-3 px-4 text-right font-mono text-[#6F7777]">--</td>
-                <td className="py-3 px-4 text-right font-mono text-[#202525]">₹24.25 Lakh</td>
-                <td className="py-3 px-4 text-right font-mono text-[#6F7777]">0.01ms</td>
+                <td className="py-3 px-4 text-right font-mono text-[#202525]">₹26.66 Lakh</td>
+                <td className="py-3 px-4 text-right font-mono text-[#6F7777]">&lt;0.1ms</td>
               </tr>
 
               {/* Logistic Regression */}
@@ -165,22 +165,22 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#6F7777]">Linear Model</td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#202525]">
-                  {benchmark?.models?.LogisticRegression?.roc_auc?.toFixed(4) || "0.6507"}
+                  {benchmark?.models?.LogisticRegression?.roc_auc?.toFixed(4) || "0.7010"}
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#202525]">
-                  {benchmark?.models?.LogisticRegression?.f1_score?.toFixed(4) || "0.5748"}
+                  {benchmark?.models?.LogisticRegression?.f1_score?.toFixed(4) || "0.6854"}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#B7791F]">
-                  {benchmark?.models?.LogisticRegression?.recovery_rate_pct?.toFixed(2) || "53.87"}%
+                  {benchmark?.models?.LogisticRegression?.recovery_rate_pct?.toFixed(2) || "63.92"}%
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#B7791F]">
-                  {benchmark?.models?.LogisticRegression?.absolute_uplift_pct_points ? `${benchmark.models.LogisticRegression.absolute_uplift_pct_points > 0 ? "+" : ""}${benchmark.models.LogisticRegression.absolute_uplift_pct_points.toFixed(2)} pp` : "-0.53 pp"}
+                  {benchmark?.models?.LogisticRegression?.absolute_uplift_pct_points ? `${benchmark.models.LogisticRegression.absolute_uplift_pct_points > 0 ? "+" : ""}${benchmark.models.LogisticRegression.absolute_uplift_pct_points.toFixed(2)} pp` : "+2.59 pp"}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#202525]">
-                  ₹{benchmark?.models?.LogisticRegression?.recovered_inr ? (benchmark.models.LogisticRegression.recovered_inr / 100000).toFixed(2) : "24.57"} Lakh
+                  ₹{benchmark?.models?.LogisticRegression?.recovered_inr ? (benchmark.models.LogisticRegression.recovered_inr / 100000).toFixed(2) : "27.78"} Lakh
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#6F7777]">
-                  {benchmark?.models?.LogisticRegression?.p99_latency_ms?.toFixed(2) || "6.34"}ms
+                  {benchmark?.models?.LogisticRegression?.p99_latency_ms?.toFixed(2) || "0.57"}ms
                 </td>
               </tr>
 
@@ -194,22 +194,22 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#087F83]">Bagging (100 Trees)</td>
                 <td className="py-3.5 px-4 text-center font-mono font-bold text-[#087F83]">
-                  {benchmark?.models?.RandomForest?.roc_auc?.toFixed(4) || "0.7512"}
+                  {benchmark?.models?.RandomForest?.roc_auc?.toFixed(4) || "0.7819"}
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono font-bold text-[#087F83]">
-                  {benchmark?.models?.RandomForest?.f1_score?.toFixed(4) || "0.6708"}
+                  {benchmark?.models?.RandomForest?.f1_score?.toFixed(4) || "0.7539"}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono font-bold text-[#2E7D5B]">
-                  {benchmark?.models?.RandomForest?.recovery_rate_pct?.toFixed(2) || "63.60"}%
+                  {benchmark?.models?.RandomForest?.recovery_rate_pct?.toFixed(2) || "68.15"}%
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono font-bold text-[#2E7D5B]">
-                  +{benchmark?.models?.RandomForest?.absolute_uplift_pct_points?.toFixed(2) || "9.20"} pp
+                  +{benchmark?.models?.RandomForest?.absolute_uplift_pct_points?.toFixed(2) || "6.82"} pp
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono font-bold text-[#087F83]">
-                  ₹{benchmark?.models?.RandomForest?.recovered_inr ? (benchmark.models.RandomForest.recovered_inr / 100000).toFixed(2) : "29.45"} Lakh
+                  ₹{benchmark?.models?.RandomForest?.recovered_inr ? (benchmark.models.RandomForest.recovered_inr / 100000).toFixed(2) : "29.62"} Lakh
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#087F83]">
-                  {benchmark?.models?.RandomForest?.p99_latency_ms?.toFixed(2) || "6.64"}ms
+                  {benchmark?.models?.RandomForest?.p99_latency_ms?.toFixed(2) || "5.83"}ms
                 </td>
               </tr>
 
@@ -223,22 +223,22 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#6F7777]">Gradient Boosting</td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#202525]">
-                  {benchmark?.models?.XGBoost?.roc_auc?.toFixed(4) || "0.7598"}
+                  {benchmark?.models?.XGBoost?.roc_auc?.toFixed(4) || "0.7953"}
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#202525]">
-                  {benchmark?.models?.XGBoost?.f1_score?.toFixed(4) || "0.6770"}
+                  {benchmark?.models?.XGBoost?.f1_score?.toFixed(4) || "0.7672"}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#202525]">
-                  {benchmark?.models?.XGBoost?.recovery_rate_pct?.toFixed(2) || "66.53"}%
+                  {benchmark?.models?.XGBoost?.recovery_rate_pct?.toFixed(2) || "72.06"}%
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#202525]">
-                  +{benchmark?.models?.XGBoost?.absolute_uplift_pct_points?.toFixed(2) || "12.13"} pp
+                  +{benchmark?.models?.XGBoost?.absolute_uplift_pct_points?.toFixed(2) || "10.73"} pp
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#202525]">
-                  ₹{benchmark?.models?.XGBoost?.recovered_inr ? (benchmark.models.XGBoost.recovered_inr / 100000).toFixed(2) : "30.90"} Lakh
+                  ₹{benchmark?.models?.XGBoost?.recovered_inr ? (benchmark.models.XGBoost.recovered_inr / 100000).toFixed(2) : "31.32"} Lakh
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#6F7777]">
-                  {benchmark?.models?.XGBoost?.p99_latency_ms?.toFixed(2) || "1.82"}ms
+                  {benchmark?.models?.XGBoost?.p99_latency_ms?.toFixed(2) || "6.18"}ms
                 </td>
               </tr>
 
@@ -249,22 +249,22 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#6F7777]">Gradient Boosting</td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#202525]">
-                  {benchmark?.models?.LightGBM?.roc_auc?.toFixed(4) || "0.7576"}
+                  {benchmark?.models?.LightGBM?.roc_auc?.toFixed(4) || "0.7976"}
                 </td>
                 <td className="py-3.5 px-4 text-center font-mono text-[#202525]">
-                  {benchmark?.models?.LightGBM?.f1_score?.toFixed(4) || "0.6773"}
+                  {benchmark?.models?.LightGBM?.f1_score?.toFixed(4) || "0.7696"}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#202525]">
-                  {benchmark?.models?.LightGBM?.recovery_rate_pct?.toFixed(2) || "66.40"}%
+                  {benchmark?.models?.LightGBM?.recovery_rate_pct?.toFixed(2) || "71.82"}%
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#202525]">
-                  +{benchmark?.models?.LightGBM?.absolute_uplift_pct_points?.toFixed(2) || "12.00"} pp
+                  +{benchmark?.models?.LightGBM?.absolute_uplift_pct_points?.toFixed(2) || "10.49"} pp
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#202525]">
-                  ₹{benchmark?.models?.LightGBM?.recovered_inr ? (benchmark.models.LightGBM.recovered_inr / 100000).toFixed(2) : "30.97"} Lakh
+                  ₹{benchmark?.models?.LightGBM?.recovered_inr ? (benchmark.models.LightGBM.recovered_inr / 100000).toFixed(2) : "31.22"} Lakh
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-[#6F7777]">
-                  {benchmark?.models?.LightGBM?.p99_latency_ms?.toFixed(2) || "1.75"}ms
+                  {benchmark?.models?.LightGBM?.p99_latency_ms?.toFixed(2) || "5.26"}ms
                 </td>
               </tr>
             </tbody>

@@ -70,11 +70,11 @@ def demo_3_model_benchmark():
         print("\033[1;31m[!] Error fetching benchmark data from services.\033[0m")
         return
 
-    print("\n\033[1mHELD-OUT TEST SET (750 Cases, ₹47.39 Lakh At Risk) EVALUATION RESULTS:\033[0m")
+    print("\n\033[1mHELD-OUT TEST SET (750 Cases, ₹43.46 Lakh At Risk) EVALUATION RESULTS:\033[0m")
     print("-" * 92)
     print(f"{'Algorithm / Model':<32} | {'ROC-AUC':<8} | {'F1':<6} | {'Rec Rate':<9} | {'Uplift (pp)':<11} | {'p99 Latency':<10}")
     print("-" * 92)
-    print(f"{'Static 1-Rule Baseline':<32} | {'N/A':<8} | {'N/A':<6} | {'54.40%':<9} | {'--':<11} | {'0.01ms':<10}")
+    print(f"{'Static 1-Rule Baseline':<32} | {'N/A':<8} | {'N/A':<6} | {'61.33%':<9} | {'--':<11} | {'<0.1ms':<10}")
     champion = res.get("champion_model", "XGBoost")
     prod_model = res.get("production_selected_model", "RandomForest")
 

@@ -495,7 +495,7 @@ def train_and_evaluate():
 
     metrics_data = {
         "model_type": "RandomForestClassifier",
-        "n_estimators": 120,
+        "n_estimators": 100,
         "test_cases_evaluated": total_test_cases,
         "total_revenue_at_risk_inr": risk_inr,
         "baseline_recovered_inr": baseline_inr,

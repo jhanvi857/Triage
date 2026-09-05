@@ -96,7 +96,7 @@ export const BatchEvaluationModal: React.FC<BatchEvaluationModalProps> = ({
               <strong>Model Training Row:</strong> Estimates the probability that candidate action succeeds given failure cause, rail, retry attempt, amount, customer history, and payday proximity.
             </p>
             <div className="text-[12px] font-mono font-medium text-[#087F83]">
-              Canonical Benchmark: 750 Held-Out Cases &bull; +5.47 pp Absolute Recovery Uplift &bull; +24.72% Relative Revenue Uplift.
+              Canonical Benchmark: 750 Held-Out Cases &bull; +6.82 pp Absolute Revenue Uplift &bull; +11.12% Relative Revenue Uplift.
             </div>
           </div>
 

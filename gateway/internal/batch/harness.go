@@ -112,7 +112,7 @@ func (h *Harness) RunBatch(numCases int) Result {
 			Recall:                  0.8478,
 			F1Score:                 0.7539,
 			Accuracy:                0.7192,
-			AbsoluteUpliftPctPoints: 5.60,
+			AbsoluteUpliftPctPoints: 6.82,
 			RelativeUpliftPct:       11.12,
 		}
 	}

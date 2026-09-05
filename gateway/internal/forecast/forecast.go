@@ -45,8 +45,8 @@ type Engine struct {
 // NewEngine creates a new deterministic forecast engine
 func NewEngine() *Engine {
 	return &Engine{
-		triageRatePct:   59.33,
-		baselineRatePct: 54.40,
+		triageRatePct:   68.15,
+		baselineRatePct: 61.33,
 	}
 }
 
