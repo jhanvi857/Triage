@@ -199,8 +199,11 @@ Triage runs a strict 5-stage authority pipeline separating non-authoritative com
 * **The Problem**: When a merchant customer experiences an abandoned checkout, a failed recurring subscription, and an overdue invoice simultaneously, uncoordinated systems send conflicting notifications in the same hour, degrading customer trust.
 * **The Architecture**:
   * Centralized customer entity coordinating across all commercial surfaces.
-  * Enforces a mandatory **4-hour global contact cooldown**.
+  * Enforces a mandatory **4-hour global contact cooldown** per customer.
   * Ranks competing opportunities by value: prioritizes high-value checkouts (e.g. INR 18,000) and suppresses lower-value dunning (e.g. INR 4,200 subscription) until the primary issue resolves.
+* **Demo Routing vs. Per-Customer Production Isolation**:
+  * In live interactive testing and video walkthroughs, each scenario button exercises an independent simulated customer identity (e.g. Customer A, Customer B), with mock domain emails routed to the developer's single configured inbox (`SMTP_USER`) so template rendering can be visually inspected.
+  * Multi-workflow suppression and contact cooldowns operate strictly on the single customer entity level: when the same customer experiences concurrent failures across multiple channels (demonstrated in Scenario 7), Triage suppresses the lower-value dunning and enforces the 4-hour cooldown.
 
 ### Decision 3: Strict Accounting Invariant
 * **The Invariant**: A transaction is **only** marked `RECOVERED` when real money is captured via verified payment gateway callback (`RecordCapture()`).
@@ -363,6 +366,7 @@ cp .env.example gateway/.env
 # SMTP_PORT=587
 # SMTP_USER=your-email@gmail.com
 # SMTP_PASS=your-16-char-app-password
+# (For demo accounts with mock domains, Triage routes emails to SMTP_USER for visual verification)
 ```
 
 ### 2. Start the ML Ranking Service (Python Random Forest):
