@@ -276,10 +276,10 @@ export const AnalyticsUpliftView: React.FC<AnalyticsUpliftViewProps> = ({
           <Info className="w-5 h-5 text-[#087F83] shrink-0 mt-0.5" />
           <div className="space-y-1">
             <span className="font-bold text-[#202525]">
-              Production Engineering Trade-off: Operational Resilience &amp; Auditability over Peak Benchmark Score
+              Production Engineering Trade-off: Dual-Runtime Architecture Parity over Peak Benchmark Score
             </span>
             <p className="text-[#6F7777] leading-relaxed">
-              While XGBoost achieved the highest raw benchmark score (+12.1 pp recovery uplift, recovering ₹30.90L vs. ₹29.45L for Random Forest &mdash; a ₹1.45L advantage on this 750-case held-out partition), <strong>we deliberately deploy Random Forest to production</strong>. In a regulated financial payments engine, avoiding external C++ compilation dependencies (libxgboost/OpenMP), eliminating native library version drift across container environments, and ensuring deterministic, fully auditable tree traversal is a conscious and mature engineering trade-off against a small synthetic benchmark margin.
+              While XGBoost achieved the highest raw benchmark recovery (72.06% vs. 68.15% for Random Forest &mdash; a +₹1.70L advantage on this 750-case held-out partition), <strong>we deliberately deploy Random Forest to production</strong>. We selected Random Forest so the exact same model architecture cleanly powers both the primary Python microservice and the zero-downtime embedded Go fallback (&lt;1ms) &mdash; guaranteeing identical recovery decisions whether Python is online or offline. Reimplementing XGBoost&apos;s gradient boosting math in Go was unspent engineering effort, given XGBoost was evaluated strictly as an offline benchmark comparator, never a serving candidate.
             </p>
           </div>
         </div>

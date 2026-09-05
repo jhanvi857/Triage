@@ -148,5 +148,5 @@
   },
   "champion_model": "XGBoost",
   "production_selected_model": "RandomForest",
-  "selection_rationale": "Production Engineering Trade-off: While XGBoost achieves the highest raw benchmark recovery (72.06% vs 68.15%, +\u20b9170,000.00 on this held-out partition), Random Forest is deliberately selected for production deployment because it eliminates external C++ runtime dependencies, prevents native library version drift, and provides transparent, deterministic bagging auditability in a regulated financial recovery workflow."
+  "selection_rationale": "Production Engineering Trade-off: While XGBoost achieved the highest raw benchmark recovery (72.06% vs 68.15%, +\u20b91,70,000.00 on this held-out partition), Random Forest is deliberately deployed to production so the exact same model architecture serves both the primary Python path and the zero-downtime embedded Go fallback (<1ms). Reimplementing XGBoost's gradient boosting math (link functions, base offsets, and sequential leaf sums) as an in-process Go engine was unspent engineering scope, given XGBoost was evaluated strictly as an offline benchmark comparator, never a production serving candidate."
 }

@@ -50,7 +50,7 @@ Evaluated under identical decline distributions (Gross Revenue at Risk: **INR 43
 | **Triage (Random Forest - Production)** | **68.15%** | **INR 29,62,000.00** | **+6.82 pp** | **+INR 2,96,300.00** | **5.83ms** | **p < 0.001** |
 | **XGBoost** (Offline Benchmark Champion) | 72.06% | INR 31,32,000.00 | +10.73 pp | +INR 4,66,300.00 | 6.18ms | p < 0.001 |
 
-> **Production Trade-off**: Random Forest (100 trees) was selected over XGBoost (+3.91 pp higher recovery) to avoid native C++ runtime dependencies (`libxgboost`/`OpenMP`) and guarantee deterministic, auditable tree traversal in financial workflows. In addition, an internal **pure Go embedded Random Forest (<1ms)** provides zero-downtime inference if the Python service is offline.
+> **Production Trade-off**: Random Forest (100 trees) was selected so the exact same model architecture serves both the primary Python microservice and the zero-downtime in-process Go fallback (<1ms) — guaranteeing identical recovery decisions whether Python is online or offline. Reimplementing XGBoost's gradient boosting math (link functions, base offsets, and leaf accumulation) as a from-scratch Go engine was unspent engineering scope, given XGBoost was evaluated strictly as an offline benchmark reference, not a deployed serving candidate.
 
 ---
 
@@ -210,9 +210,9 @@ Triage runs a strict 5-stage authority pipeline separating non-authoritative com
 * **Integrity**: Scheduling a payday retry, registering a Promise-to-Pay (PTP), or updating a card leaves `amount_recovered = 0`. Downgrading an already-recovered case away from `RECOVERED` is cryptographically forbidden.
 
 ### Decision 4: Production ML Deployment Trade-Off and Zero-Downtime Resilience
-* **The Architecture**: While XGBoost achieved a marginal benchmark advantage on synthetic partitions, Triage deploys a pure **Random Forest Classifier** (`ml-service/train.py`, 100 estimators) to production.
-* **The Trade-Off**: Eliminates native C++ compilation dependencies (`libxgboost`/`OpenMP`), prevents container version drift, and guarantees deterministic, 100% auditable tree traversal for financial compliance.
-* **Resilience Architecture**: Production calls query the Python Random Forest service (`http://localhost:8000/rank`). If unreachable, an internal **pure Go embedded Random Forest** (`EmbeddedRank`, `<1ms`) evaluates all 100 trees directly in memory to guarantee zero gateway downtime.
+* **The Architecture**: While XGBoost achieved a benchmark advantage on synthetic partitions, Triage deploys a pure **Random Forest Classifier** (`ml-service/train.py`, 100 estimators) to production.
+* **The Trade-Off & Parity Constraint**: Random Forest was chosen because its bagged decision trees (`threshold`, `left`, `right`, and leaf average) can be cleanly mirrored into an in-process pure Go inference engine (`EmbeddedRank`, `<1ms`). This guarantees identical, bit-for-bit reproducible recovery decisions whether the Python service is online or offline. Reimplementing XGBoost's gradient boosting mechanics (base offsets, logistic link functions, and sequential leaf sums) in Go was unspent engineering effort, as XGBoost served strictly as an offline benchmark comparator, never a production deployment candidate.
+* **Resilience Architecture**: Production calls query the Python Random Forest service (`http://localhost:8000/rank`). If unreachable or timing out, the gateway executes the embedded Go Random Forest directly in-process without network hops or downtime.
 
 ### Decision 5: Live Telemetry vs. Offline Benchmark
 * **The Architecture**: The **Live Operations** cockpit (`OVERVIEW`) listens exclusively to real SSE webhooks from the customer storefront. Cases are tagged as `LIVE · SANDBOX` or `LIVE · HMAC VERIFIED`.

@@ -1216,7 +1216,7 @@ func (ts *TriageServer) handleMLBenchmark(w http.ResponseWriter, r *http.Request
 			},
 			ChampionModel:           "XGBoost",
 			ProductionSelectedModel: "RandomForest",
-			SelectionRationale:      "Production Engineering Trade-off: While XGBoost achieves the highest raw benchmark recovery (66.5% vs 63.6%, +₹1.45L on held-out test), Random Forest is deliberately selected for production deployment because it eliminates external C++ runtime dependencies, prevents native library version drift, and provides transparent, deterministic bagging auditability in a regulated financial recovery workflow.",
+			SelectionRationale:      "Production Engineering Trade-off: While XGBoost achieved the highest raw benchmark recovery (72.06% vs 68.15%, +₹1.70L on held-out test), Random Forest is deliberately deployed to production so the exact same model architecture serves both the primary Python path and the zero-downtime embedded Go fallback (<1ms). Reimplementing XGBoost's gradient boosting math as an in-process Go engine was unspent engineering scope, given XGBoost was evaluated strictly as an offline benchmark comparator, never a production serving candidate.",
 		}
 	}
 
