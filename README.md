@@ -3,7 +3,7 @@
 [![Watch Triage Demo Video](https://img.shields.io/badge/Demo%20Video-Watch%20Walkthrough-blue?style=for-the-badge&logo=youtube)](https://drive.google.com/file/d/1uh3zhQRknUTt3QNnbQC6lrApSMwpoHKB/view?usp=sharing)
 [![Go Control Plane](https://img.shields.io/badge/Go%20Gateway-Dual--Mode%20ML-00ADD8?style=for-the-badge&logo=go)](https://golang.org)
 [![Audit Ledger](https://img.shields.io/badge/Audit%20Ledger-SQLite%20WAL%20%2B%20SHA--256-black?style=for-the-badge)](https://github.com/jhanvi857/Triage)
-[![Deterministic Engine](https://img.shields.io/badge/Diagnosis-0%20AI%20Hallucination-success?style=for-the-badge)](https://github.com/jhanvi857/Triage)
+[![Deterministic Architecture](https://img.shields.io/badge/Diagnosis-No%20LLM%20in%20Decision%20Path-success?style=for-the-badge)](https://github.com/jhanvi857/Triage)
 
 > Autonomous cross-workflow AI revenue recovery control plane that diagnoses payment failures, dynamically times retries to customer liquidity windows, de-conflicts multi-surface dunning, and executes bounded recoveries with an immutable SQLite-persisted, SHA-256 cryptographic audit trail.
 
@@ -35,7 +35,11 @@ Digital merchants and subscription platforms lose **3% to 7% of gross revenue** 
 
 ## 2. Measured Financial Recovery Benchmark (750 Held-Out Cases)
 
-Evaluated under controlled, held-out Bernoulli conditions across identical decline distributions (Gross Revenue at Risk: **INR 43,46,400.00** across 750 held-out test cases):
+> **Methodological Scope and Disclosure**:
+> This benchmark evaluates decision logic correctness, candidate ranking, and policy veto adherence in a controlled counterfactual simulation environment. The 750 test cases represent a held-out test partition (15% split of 5,000 synthetic records, seed 42) evaluated against a designed multi-variable ground-truth probability distribution modeling real-world decline interactions (failure cause, payment rail, payday proximity, attempt count).
+> While this rigorously validates that context-aware retries, Knapsack concessions, and secondary rail switches systematically outperform native static single-rule retries (+6.82 pp uplift, p < 0.001), it measures policy decision fit against a designed reward model rather than live production transactions. Live validation against merchant test-mode traffic is the subsequent operational milestone.
+
+Evaluated under identical decline distributions (Gross Revenue at Risk: **INR 43,46,400.00** across 750 held-out test cases):
 
 | Policy / Model | Recovery Rate (%) | Recovered INR (of INR 43.46L) | Absolute Uplift | Net Financial Gain | Latency (P99) | Statistical Significance |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -44,8 +48,6 @@ Evaluated under controlled, held-out Bernoulli conditions across identical decli
 | **Triage (Random Forest - Production)** | **68.15%** | **INR 29,62,000.00** | **+6.82 pp** | **+INR 2,96,300.00** | **5.83ms** | **p < 0.001** |
 | **XGBoost** (Offline Benchmark Champion) | 72.06% | INR 31,32,000.00 | +10.73 pp | +INR 4,66,300.00 | 6.18ms | p < 0.001 |
 
-> **Benchmark Methodology Disclosure**: The 750 test cases represent a held-out test split (15% of 5,000 generated cases, seed 42) evaluated counterfactually against a designed multi-variable ground-truth probability distribution. This benchmark verifies policy decisioning and ranking correctness across multi-variable interactions (cause, rail, payday proximity, attempt count). Production validation against live merchant traffic is the subsequent deployment milestone.
->
 > **Production Trade-off**: Random Forest (100 trees) was selected over XGBoost (+3.91 pp higher recovery) to avoid native C++ runtime dependencies (`libxgboost`/`OpenMP`) and guarantee deterministic, auditable tree traversal in financial workflows. In addition, an internal **pure Go embedded Random Forest (<1ms)** provides zero-downtime inference if the Python service is offline.
 
 ---
@@ -130,7 +132,7 @@ Triage runs a strict 5-stage authority pipeline separating non-authoritative com
 ### The 5 Stages of Recovery Decisioning
 
 1. **Deterministic Diagnosis (0 AI)**:
-   * Maps raw decline codes (`INSUFFICIENT_FUNDS`, `GATEWAY_TIMEOUT_504`, `TRANSACTION_TIMEOUT`, `LIMIT_EXCEEDED`, `CARD_EXPIRED`, `OVERDUE_INVOICE`) and metadata into universal root causes. Zero hallucinations, 100% deterministic code rules.
+   * Maps raw decline codes (`INSUFFICIENT_FUNDS`, `GATEWAY_TIMEOUT_504`, `TRANSACTION_TIMEOUT`, `LIMIT_EXCEEDED`, `CARD_EXPIRED`, `OVERDUE_INVOICE`) and metadata into universal root causes. No generative guessing, 100% deterministic code rules.
 
 2. **Context-Aware Eligibility and Candidate Bounds**:
    * Inspects customer context: available balance, payday proximity, verified backup cards on file, UPI availability, and remaining attempt limits.
@@ -234,8 +236,8 @@ This section consolidates engineering challenges, failure recoveries, and implem
 
 ### 6 Key Technical Solutions and Honest Limitations
 
-* **1. Eliminating AI Hallucination in Financial Decisioning**
-  * *Obstacle:* Relying on generative AI for diagnosing payment failures caused non-deterministic advice (e.g., proposing retries on expired cards or unauthorized discounts).
+* **1. Deterministic Financial Guardrails (No LLMs in Decisioning)**
+  * *Obstacle:* Relying on generative LLMs for payment decisioning introduces non-deterministic outputs, prompt injection vulnerabilities, and unauthorized discount commitments during checkout.
   * *Solution:* Built a strict **5-Stage Authority Pipeline** where Diagnosis (Stage 1) and Candidate Bounds (Stage 2) are 100% deterministic code rules. ML is isolated strictly to ranking expected recovery probability.
 
 * **2. Low-Latency ML Inference (<1ms) Without Microservice Downtime**

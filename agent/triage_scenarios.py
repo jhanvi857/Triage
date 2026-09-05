@@ -259,7 +259,7 @@ def scenario_5_ptp_parsing():
     res2 = http_post("/api/v1/triage/ptp/parse", {"message": "haan next Monday kar lo"})
     print_success(f"Promise Detected: {res2.get('promise_detected')} | Scheduled Date: \033[1;32m{res2.get('promised_date')}\033[0m")
 
-    print_step(3, "Case C: Ambiguous Natural Language (Zero LLM Hallucination)",
+    print_step(3, "Case C: Ambiguous Natural Language (Deterministic Human Escalation)",
                "Input: 'Actually things are complicated, I will probably be able to pay sometime after salary comes...'")
     res3 = http_post("/api/v1/triage/ptp/parse", {
         "message": "Actually things are complicated, I will probably be able to pay sometime after salary comes..."
@@ -495,7 +495,7 @@ def scenario_11_mandate_limit():
         mark = "✓" if rule.get("passed") else "✗"
         print(f"    [{mark}] {rule.get('rule_name')}: {rule.get('reason')}")
 
-    print(f"\n  \033[1m[POLICY-CONSTRAINED NUDGE DRAFT (Zero LLM Hallucination)]\033[0m")
+    print(f"\n  \033[1m[POLICY-CONSTRAINED NUDGE DRAFT (Deterministic Template)]\033[0m")
     print(f"    \"{c.get('customer_facing_msg')}\"")
     print("     Key Design Principle: The recurring mandate is UNTOUCHED for future cycles; 1-time UPI clears immediate invoice.")
 

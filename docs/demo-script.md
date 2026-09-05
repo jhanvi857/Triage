@@ -93,7 +93,7 @@ python agent/run_scenarios.py --scenario 5
 - **Pattern A**: `"Bhai 5th ko debit karna"` $\rightarrow$ `PromiseDetected: true`, `PromisedDate: 2026-09-05` (Method: `ORDINAL_DAY_REGEX`).
 - **Pattern B**: `"haan next Monday"` $\rightarrow$ Scheduled for `2026-09-07`.
 - **Pattern C**: `"Actually things are complicated, I will probably be able to pay sometime after salary comes..."`
-  $\rightarrow$ **`NeedsHumanReview: true`, `PromiseDetected: false`** (Zero LLM guessing / zero hallucinations).
+  $\rightarrow$ **`NeedsHumanReview: true`, `PromiseDetected: false`** (Deterministic NLP parser / no generative guessing).
 
 ---
 

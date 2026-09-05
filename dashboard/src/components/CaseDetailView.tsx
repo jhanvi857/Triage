@@ -593,7 +593,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
             </h2>
           </div>
           <span className="text-[11px] font-mono font-semibold bg-[#E6F4F1] text-[#087F83] px-2 py-0.5 rounded border border-[#B2DFDB]">
-            Deterministic Recovery Templates &bull; Policy-Gated Dispatch &bull; Zero Hallucinations
+            Deterministic Recovery Templates &bull; Policy-Gated Dispatch &bull; No LLM in Decision Path
           </span>
         </div>
 
