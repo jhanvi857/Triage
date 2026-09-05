@@ -11,25 +11,27 @@
 
 ## 1. Executive Overview: The 4 Core Problems Triage Solves
 
-Digital merchants and subscription platforms lose **3% to 7% of gross revenue** to payment friction and uncoordinated dunning. Standard payment gateways process transactions efficiently, but handle declines via isolated product silos and static daily retry schedules.
+Failed payments, checkout drop-offs, and uncoordinated dunning represent a primary source of involuntary churn and lost revenue for recurring-revenue businesses. Modern payment platforms like Razorpay and Stripe provide essential recovery primitives: smart retries, tokenized card updates, webhooks, and automated notifications. However, these primitives typically operate within isolated product silos.
 
-### The 4 Real-World Failures and Triage Solutions:
+Triage operates as a higher-level cross-workflow control plane that unifies, times, and policy-governs recovery actions across all commercial surfaces under a single customer entity.
 
-1. **Blind Retries on Empty Accounts**:
-   * *Problem*: Standard retries hit accounts on fixed calendar days (T+1, T+2), exhausting attempt quotas while the customer balance is still insufficient.
-   * *Solution*: **Payday-Aware Adaptive Sequencer** detects customer salary and funding windows (<= 3 days) and locks auto-retries into the liquidity window when funds clear.
+### The 4 Real-World Recovery Challenges and Triage Solutions:
 
-2. **Dunning Collisions and Notification Fatigue**:
-   * *Problem*: A single customer with a dropped cart, a failed subscription, and an overdue B2B invoice receives competing, disjoint dunning messages in the same hour.
-   * *Solution*: **Centralized Customer Entity** enforces a mandatory **4-hour global contact cooldown** and value-ranked dunning suppression (prioritizing higher-value recoveries).
+1. **Liquidity-Aware Recovery Timing**:
+   * *The Problem*: Generic or fixed retry schedules (such as daily T+1, T+2 retries) cannot account for an individual customer's real-time liquidity state, consuming attempt limits while the customer balance remains insufficient.
+   * *Triage Solution*: Extends timing optimization with an explicit customer liquidity and **Payday Proximity Sequencer** (<= 3 days to salary deposit), scheduling retries when funds actually arrive.
 
-3. **Margin Burn from Blind Discounts**:
-   * *Problem*: Flat discount links burn profit margin on customers who either do not need them or whose balance gap is too wide to close.
-   * *Solution*: **Dual-Gated Knapsack Concession Engine** authorizes discounts only if the concession mathematically closes the shortfall (`balance >= amount - concession`) and fits the daily portfolio budget.
+2. **Dunning Collisions and Cross-Workflow Coordination**:
+   * *The Problem*: When a customer experiences an abandoned checkout, a failed recurring subscription, and an overdue invoice simultaneously, disconnected systems fire competing notifications in the same hour, degrading customer trust.
+   * *Triage Solution*: Centralized customer entity enforces a configurable **4-hour global contact cooldown** and value-ranked recovery prioritization (e.g. prioritizing an INR 18,000 cart checkout while temporarily holding dunning for an INR 4,200 subscription).
 
-4. **Conversational Commitments Ignored**:
-   * *Problem*: Customers explaining payment delays (e.g., "5 tarik ko kar dunga") are treated as lost leads by automated systems.
-   * *Solution*: **Hinglish NLP Promise-to-Pay (PTP) Engine** parses conversational commitments into stateful cron recovery schedules.
+3. **Constrained Concession Optimization**:
+   * *The Problem*: Flat or unconstrained discount promos erode merchant profit margin on customers who either do not need an incentive or whose balance gap is too wide to close.
+   * *Triage Solution*: **Dual-Gated Knapsack Concession Engine** treats discounts as an optimized financial intervention: Gate 1 deterministically checks that the concession closes the customer shortfall (`balance >= amount - concession`), and Gate 2 allocates daily portfolio budget based on marginal ERV density.
+
+4. **Conversational Payment Commitments (PTP)**:
+   * *The Problem*: When customers explain payment delays in colloquial natural language (e.g., "5 tarik ko kar dunga"), standard automated gateways treat them as uncollected or lost.
+   * *Triage Solution*: **Hinglish NLP Promise-to-Pay (PTP) Engine** parses conversational Indian date entities into stateful cron recovery schedules (`PTP_COMMITTED`), with strict accounting (INR 0 counted as recovered until funds settle).
 
 ---
 
@@ -52,15 +54,15 @@ Evaluated under identical decline distributions (Gross Revenue at Risk: **INR 43
 
 ---
 
-## 3. What Razorpay Has Today vs. What Triage Adds
+## 3. What Payment Platforms Provide Today vs. What Triage Adds as a Control Plane
 
-| # | Capability | Razorpay Native Behavior (Official Docs) | Triage AI Control Plane (Implemented) |
+| # | Capability Area | Gateway Primitives (Official Docs) | Triage Cross-Workflow Control Plane |
 |:---:|---|---|---|
-| **1** | **Dual-Gated Concession Solvency Engine** | **Static merchant offers**: Razorpay Offers system supports flat or percentage discounts configured manually at the order level, not computed dynamically against an individual customer solvency gap. | **2-Gate Knapsack Solver**: Gate 1 deterministic gap-closing check (`balance >= amount - concession`) plus Gate 2 marginal ERV density portfolio budget allocator. |
-| **2** | **Payday-Aware Adaptive Sequencer** | **Fixed daily schedule**: Razorpay Subscriptions Payment Retries doc describes a fixed T+1, T+2, T+3 day cycle regardless of decline reason, not liquidity-timed. | **Payday Proximity Sequencer**: Times retries to customer salary liquidity windows (<= 3 days), executing debits when funds actually land in the bank account. |
-| **3** | **Conversational Text-Based Promise-to-Pay (PTP)** | **Static SMS / email links**: Standard notification templates. Track 03 of Razorpay AI Buildathon suggested conversational recovery as a conceptual track direction, not native behavior. | **Text NLP PTP Engine**: Extracts conversational dates from customer text ("parso karunga", "5 tarik") into structured schedules, tracking stateful `PTP_COMMITTED` to `RECOVERED` or `PTP_MISSED` transitions. (Text-based; voice pipeline not included). |
-| **4** | **Instrument Invalidation Candidate Bounds** | **Blind daily retries**: Payment Retries doc notes retries continue on the same daily cycle until attempts exhaust and status becomes `halted`. No automatic instrument-pruning on permanent card expiry or bank revocation. | **Strict Candidate Bounds**: Sets recovery probability to zero on expired cards and revoked mandates, pruning blind retries and shifting instantly to alternate rails or 1-click update links. |
-| **5** | **Cryptographic Audit Ledger and Provenance** | **Ephemeral webhook retries**: Webhooks Best Practices doc confirms exponential backoff for 24 hours, then the webhook is disabled; lacks an immutable, cryptographic hash-chained audit trail. | **SQLite-Backed SHA-256 Ledger**: Cryptographically hash-chained ledger storing state transitions, idempotency keys, and tamper-evident financial receipts over real-time SSE, persisted to SQLite. |
+| **1** | **Concession & Discount Optimization** | **Static merchant offers**: Platforms provide coupon systems and flat/percentage order discounts configured manually at the merchant level. | **Policy-Constrained Concession Allocator**: Evaluates Gate 1 deterministic gap-closing check (`balance >= amount - concession`) plus Gate 2 marginal ERV density portfolio Knapsack budget optimization. |
+| **2** | **Retry Timing & Liquidity Scheduling** | **Platform-level retry models**: Gateways provide Smart Retries and fixed interval retries (T+1, T+2, T+3) based on global network and processor telemetry. | **Liquidity-Aware Payday Sequencer**: Extends timing optimization with customer-specific liquidity window signals (payday proximity <= 3 days), timing retries to when customer funds land. |
+| **3** | **Conversational Commitments (PTP)** | **Standard notification templates**: Platforms send automated failed-payment emails and SMS notifications with static checkout links. | **Text NLP PTP Engine**: Extracts conversational dates from customer text ("parso karunga", "5 tarik") into structured cron schedules, tracking stateful `PTP_COMMITTED` to `RECOVERED` or `PTP_MISSED` transitions. (Text-based; voice pipeline not included). |
+| **4** | **Instrument Invalidation Bounds** | **Hard decline handling**: Permanent declines and halted subscriptions trigger manual card update links sent post-failure. | **Explicit Candidate Pruning**: Sets recovery probability to zero on expired cards and revoked mandates, pruning blind retries immediately and shifting to secondary rails or 1-click update links. |
+| **5** | **Audit Trail & Financial Ledger** | **Ephemeral webhook logs**: Gateways provide webhook event deliveries with standard exponential retry windows (e.g. 24-hour webhook backoff). | **SQLite-Backed SHA-256 Ledger**: Cryptographically hash-chained ledger storing state transitions, idempotency keys, and tamper-evident financial receipts over real-time SSE, persisted to SQLite. |
 
 ---
 

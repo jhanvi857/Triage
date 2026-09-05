@@ -2,12 +2,16 @@
 
 ## 0. Introduction & Architectural Hook (30 Seconds)
 
-> *"Good afternoon. We are presenting **Triage** - an autonomous AI revenue recovery engine for failed subscription and invoice payments.*
+> *"Good afternoon. We are presenting **Triage** - an autonomous cross-workflow AI revenue recovery control plane.
 >
-> *Our core architectural principle is:*
-> **ML ranks bounded recovery choices. Deterministic code diagnoses, authorizes, limits, executes, and audits.**
+> Modern payment platforms like Razorpay provide critical recovery primitives: Smart Retries, tokenized card updates, webhooks, and automated notifications. But in production, these primitives operate in isolated silos across checkouts, subscriptions, and invoices.
 >
-> *There is **zero generative AI**, **zero LLMs**, **zero AI in diagnosis**, and **zero AI in financial execution**. Instead, we use one tabular Random Forest ranking model over mathematically bounded action spaces, guarded by a strict deterministic policy engine, and sealed into a SHA-256 cryptographic recovery ledger."*
+> **Triage is the higher-level control plane that unifies, times, and policy-governs these primitives across commercial surfaces.**
+>
+> Our architecture follows a strict principle:
+> **ML ranks bounded recovery actions based on customer context. Deterministic code diagnoses, authorizes, limits, executes, and audits.**
+>
+> There are **zero LLMs in the financial decision path** and **zero generative AI in execution**. Instead, we deploy a tabular Random Forest ranking model across mathematically bounded action spaces, governed by a deterministic policy engine, and sealed into an immutable SQLite-backed SHA-256 cryptographic audit trail."*
 
 ---
 
@@ -127,7 +131,7 @@ python agent/run_scenarios.py --batch 50
 >
 > *"Judges, an honest note on our ML metrics: In payment recovery, real-world customer liquidity and bank infrastructure have irreducible entropy. We evaluated our models with stochastic Bernoulli noise across 750 held-out cases rather than sharp threshold memorization.*
 >
-> *Our Random Forest model achieves **0.7819 ROC-AUC** and **+5.60 percentage points recovery uplift** (reaching **0.7953 ROC-AUC / +8.93pp** with XGBoost). This closely mirrors published fintech benchmarks (like Razorpay's dynamic smart routing and Stripe's smart retries where a 5–8pp uplift drives tens of millions in enterprise GMV), demonstrating that our contextual ranking engine genuinely optimizes recovery economics rather than overfitting to synthetic generator shortcuts."*
+> *Our Random Forest model achieves **0.7819 ROC-AUC** and **+5.60 percentage points recovery uplift** (reaching **0.7953 ROC-AUC / +8.93pp** with XGBoost). This closely mirrors published fintech benchmarks (like Razorpay's dynamic smart routing and Stripe's smart retries where a 5-8pp uplift drives tens of millions in enterprise GMV), demonstrating that our contextual ranking engine genuinely optimizes recovery economics rather than overfitting to synthetic generator shortcuts."*
 
 ---
 
