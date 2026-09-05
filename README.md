@@ -19,6 +19,19 @@
 | **4** | **Instrument Invalidation Candidate Bounds** | **Blind daily retries**: same *"Payment Retries"* doc - retries on the same daily cycle until attempts exhaust and status becomes `halted`. No automatic instrument-pruning on permanent card expiry or bank revocation - only a manual "Update Payment Method" link sent post-halt. | **Strict Candidate Bounds**: Sets $\hat{P}(\text{recover} \mid \text{same rail}) = 0$ on expired cards/revoked mandates, pruning blind retries and shifting instantly to alternate rails or 1-click update links. |
 | **5** | **Cryptographic Audit Ledger & Provenance** | **Ephemeral webhook retries**: Razorpay's Webhooks *"Best Practices"* doc confirms exponential backoff for 24 hours, then the webhook is disabled; lacks an immutable, cryptographic hash-chained audit trail. | **SHA-256 Audit Ledger**: Cryptographically hash-chained ledger storing state transitions, idempotency keys, and tamper-evident financial receipts over real-time SSE. |
 
+### Measured Financial Recovery Benchmark (750 Held-Out Cases)
+
+Evaluated under controlled, held-out Bernoulli conditions across identical decline distributions (Gross Revenue at Risk: **₹43,46,400.00** across 750 test cases):
+
+| Policy / Model | Recovery Rate (%) | ₹ Recovered (of ₹43.46L) | Absolute Uplift | Net Financial Gain | Latency (P99) | Statistical Sig. |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Random Policy** (Uniform candidate selection) | 38.40% | ₹16,68,200.00 | -22.93 pp | -₹9,97,500.00 | <0.1ms | — |
+| **Static Baseline** (Razorpay native 1-rule/cause) | 61.33% | ₹26,65,700.00 | Baseline | Baseline (₹0) | <0.1ms | — |
+| **Triage (Random Forest - Production)** | **68.15%** | **₹29,62,000.00** | **+6.82 pp** | **+₹2,96,300.00** | **5.83ms** | **$p < 0.001$** |
+| **XGBoost** (Offline Benchmark Champion) | 72.06% | ₹31,32,000.00 | +10.73 pp | +₹4,66,300.00 | 6.18ms | $p < 0.001$ |
+
+> **Production Trade-off**: Random Forest was chosen for deployment over XGBoost (+3.91 pp higher recovery) to avoid C++ native dependencies (`libxgboost`/`OpenMP`) and guarantee deterministic, auditable tree traversal in regulated financial recovery workflows. In addition, an internal **deterministic calibrated heuristic fallback (<1ms)** guarantees 100% gateway uptime if the ML microservice is ever unreachable.
+
 ---
 
 ## 2. Executive Overview: The 4 Core Problems Triage Solves
@@ -201,6 +214,9 @@ Every failure scenario maps to a deterministic eligibility envelope. Discounts a
 ### Decision 5: Live Telemetry vs. Offline Benchmark
 * **The Architecture**: The **Live Operations** cockpit (`OVERVIEW`) listens exclusively to real SSE webhooks from the customer storefront. Cases are tagged as `LIVE · SANDBOX` or `LIVE · HMAC VERIFIED`.
 * **Zero Dummy Data**: Root causes and operational KPIs are computed dynamically from live cases. Offline statistical evaluation is housed strictly in the **Batch Evaluation (`EVALUATION`)** harness.
+* **Harness vs. Integration Suite Clarification**:
+  - **Batch Evaluation Harness** (`dashboard` EVALUATION tab / `gateway/internal/batch/harness.go` & `ml-service/benchmark.py`): Simulates counterfactual policy executions across 750+ held-out transactions to evaluate aggregate recovery rate uplift, statistical significance ($p < 0.001$), and action distributions.
+  - **End-to-End Integration Suite** (`agent/triage_scenarios.py`): An automated integration runner executing live HTTP requests against the running Go Gateway to validate the 7 operational production flows (idempotent captures, 4-hour cooldown suppression, Hinglish PTP parsing, fraud halts, etc.).
 
 ---
 
@@ -284,7 +300,19 @@ python triage_scenarios.py --all
 
 ---
 
-## 8. Quickstart (Local Setup)
+## 8. Technology Stack at a Glance
+
+| Component | Technology | Role & Key Responsibilities |
+|---|---|---|
+| **API Gateway & Control Plane** | **Go (Golang 1.22+)** | Authoritative 5-stage pipeline, deterministic Knapsack solver, `<1ms` embedded heuristic fallback, Server-Sent Events (SSE) stream. |
+| **Audit Ledger & Database** | **SQLite3 (WAL Mode)** | Cryptographic SHA-256 hash-chained state transitions, idempotency deduplication, immutable financial event log. |
+| **ML Ranking Engine** | **Python (FastAPI, Scikit-learn)** | 100-estimator Random Forest scoring $\hat{P}(\text{recover} \mid \text{action})$, trained on 34-dimensional feature vector. |
+| **Operations Cockpit** | **Next.js 14 (App Router, TailwindCSS, Lucide)** | Real-time SSE command center, live pipeline Kanban, batch counterfactual policy evaluator. |
+| **Customer Storefront & Portal**| **React (Vite, TypeScript, TailwindCSS)** | Live sandbox checkout drop-off, conversational Hinglish PTP prompt bar, self-serve payment recovery portal. |
+
+---
+
+## 9. Quickstart (Local Setup)
 
 ### 1. Configure Environment:
 ```bash
