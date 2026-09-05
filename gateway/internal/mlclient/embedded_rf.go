@@ -61,7 +61,7 @@ func LoadEmbeddedRandomForest(data []byte) (*EmbeddedRandomForest, error) {
 	return &rf, nil
 }
 
-// Vectorize converts CaseFeatures and a candidate action into a 31-dimensional float vector
+// Vectorize converts CaseFeatures and a candidate action into a 34-dimensional float vector
 func (rf *EmbeddedRandomForest) Vectorize(f CaseFeatures, action string) []float64 {
 	vec := make([]float64, len(rf.FeatureNames))
 

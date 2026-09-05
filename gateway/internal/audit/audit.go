@@ -5,25 +5,28 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/ledger/gateway/internal/storage"
 )
 
 // Audit actions.
 const (
-	ActionPurchaseInitiated      = "PURCHASE_INITIATED"
-	ActionGateEvaluation         = "GATE_EVALUATION"
-	ActionApprovalRequested      = "APPROVAL_REQUESTED"
-	ActionApprovalGranted        = "APPROVAL_GRANTED"
-	ActionApprovalRejected       = "APPROVAL_REJECTED"
-	ActionRazorpayOrderCreated   = "RAZORPAY_ORDER_CREATED"
-	ActionPaymentCaptured        = "PAYMENT_CAPTURED"
-	ActionPaymentFailed          = "PAYMENT_FAILED"
-	ActionOverBudgetRejected     = "OVER_BUDGET_REJECTED"
-	ActionIdempotencyReplay      = "IDEMPOTENCY_REPLAY"
-	ActionBudgetReset            = "BUDGET_RESET"
+	ActionPurchaseInitiated    = "PURCHASE_INITIATED"
+	ActionGateEvaluation       = "GATE_EVALUATION"
+	ActionApprovalRequested    = "APPROVAL_REQUESTED"
+	ActionApprovalGranted      = "APPROVAL_GRANTED"
+	ActionApprovalRejected     = "APPROVAL_REJECTED"
+	ActionRazorpayOrderCreated = "RAZORPAY_ORDER_CREATED"
+	ActionPaymentCaptured      = "PAYMENT_CAPTURED"
+	ActionPaymentFailed        = "PAYMENT_FAILED"
+	ActionOverBudgetRejected   = "OVER_BUDGET_REJECTED"
+	ActionIdempotencyReplay    = "IDEMPOTENCY_REPLAY"
+	ActionBudgetReset          = "BUDGET_RESET"
 )
 
 // Entry is an immutable, hash-chained record in the Ledger audit trail.
@@ -56,11 +59,48 @@ type Filter struct {
 
 // Logger maintains the append-only audit trail and live SSE subscriber fan-out.
 type Logger struct {
-	mu           sync.RWMutex
-	entries      []Entry
-	lastHash     string
-	subscribers  map[chan Entry]struct{}
-	subMu        sync.RWMutex
+	mu          sync.RWMutex
+	entries     []Entry
+	lastHash    string
+	subscribers map[chan Entry]struct{}
+	subMu       sync.RWMutex
+	db          *storage.DB
+}
+
+// AttachDB wires a SQLite-backed store so entries survive a process restart.
+// Safe to call once at startup; persistence is best-effort and never blocks
+// or fails a request if the write errors.
+func (l *Logger) AttachDB(db *storage.DB) {
+	l.mu.Lock()
+	l.db = db
+	l.mu.Unlock()
+}
+
+// LoadFromDB rebuilds the in-memory hash chain from persisted entries, so a
+// restarted gateway resumes the same chain instead of starting a new one.
+// Call once at startup, after AttachDB, before serving traffic.
+func (l *Logger) LoadFromDB() error {
+	if l.db == nil {
+		return nil
+	}
+	records, err := l.db.LoadAuditChain()
+	if err != nil {
+		return err
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, r := range records {
+		l.entries = append(l.entries, Entry{
+			ID: r.ID, EventID: r.EventID, Timestamp: r.Timestamp, AgentID: r.AgentID,
+			Action: r.Action, Reasoning: r.Reasoning, GateDecision: r.GateDecision,
+			GateReason: r.GateReason, RuleBreakdown: r.RuleBreakdown, OrderID: r.OrderID,
+			AmountPaise: r.AmountPaise, Currency: r.Currency, IdempotencyKey: r.IdempotencyKey,
+			Status: r.Status, PrevHash: r.PrevHash, EntryHash: r.EntryHash,
+		})
+		l.lastHash = r.EntryHash
+	}
+	return nil
 }
 
 // NewLogger creates a new hash-chained audit logger.
@@ -95,9 +135,26 @@ func (l *Logger) Append(e Entry) Entry {
 	l.lastHash = e.EntryHash
 
 	l.entries = append(l.entries, e)
+	db := l.db
 
 	// Broadcast asynchronously to all active SSE subscribers
 	go l.broadcast(e)
+
+	// Persist synchronously so the caller can trust the entry survived a
+	// restart before it returns. Best-effort: a write failure is logged,
+	// not fatal, since the in-memory chain is already authoritative for
+	// the current process.
+	if db != nil {
+		if err := db.SaveAuditEntry(storage.AuditEntryRecord{
+			ID: e.ID, EventID: e.EventID, Timestamp: e.Timestamp, AgentID: e.AgentID,
+			Action: e.Action, Reasoning: e.Reasoning, GateDecision: e.GateDecision,
+			GateReason: e.GateReason, RuleBreakdown: e.RuleBreakdown, OrderID: e.OrderID,
+			AmountPaise: e.AmountPaise, Currency: e.Currency, IdempotencyKey: e.IdempotencyKey,
+			Status: e.Status, PrevHash: e.PrevHash, EntryHash: e.EntryHash,
+		}); err != nil {
+			log.Printf("[WARN] audit entry %s not persisted to SQLite: %v", e.EventID, err)
+		}
+	}
 
 	return e
 }

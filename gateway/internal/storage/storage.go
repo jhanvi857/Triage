@@ -307,6 +307,67 @@ func (s *DB) ListPendingApprovals() ([]ApprovalRecord, error) {
 	return list, nil
 }
 
+// AuditEntryRecord mirrors audit.Entry for persistence (kept dependency-free of the audit package).
+type AuditEntryRecord struct {
+	ID             string
+	EventID        string
+	Timestamp      time.Time
+	AgentID        string
+	Action         string
+	Reasoning      string
+	GateDecision   string
+	GateReason     string
+	RuleBreakdown  string
+	OrderID        string
+	AmountPaise    int64
+	Currency       string
+	IdempotencyKey string
+	Status         string
+	PrevHash       string
+	EntryHash      string
+}
+
+// SaveAuditEntry persists a single hash-chained audit entry.
+func (s *DB) SaveAuditEntry(e AuditEntryRecord) error {
+	_, err := s.db.Exec(`
+		INSERT OR REPLACE INTO audit_logs (
+			id, event_id, timestamp, agent_id, action, reasoning,
+			gate_decision, gate_reason, rule_breakdown, order_id,
+			amount_paise, currency, idempotency_key, status, prev_hash, entry_hash
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, e.ID, e.EventID, e.Timestamp, e.AgentID, e.Action, e.Reasoning,
+		e.GateDecision, e.GateReason, e.RuleBreakdown, e.OrderID,
+		e.AmountPaise, e.Currency, e.IdempotencyKey, e.Status, e.PrevHash, e.EntryHash)
+	return err
+}
+
+// LoadAuditChain returns all persisted audit entries in insertion order, for
+// rebuilding the in-memory hash chain on restart and for offline verification.
+func (s *DB) LoadAuditChain() ([]AuditEntryRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, event_id, timestamp, agent_id, action, reasoning,
+			   gate_decision, gate_reason, rule_breakdown, order_id,
+			   amount_paise, currency, idempotency_key, status, prev_hash, entry_hash
+		FROM audit_logs ORDER BY rowid ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []AuditEntryRecord
+	for rows.Next() {
+		var e AuditEntryRecord
+		if err := rows.Scan(&e.ID, &e.EventID, &e.Timestamp, &e.AgentID, &e.Action, &e.Reasoning,
+			&e.GateDecision, &e.GateReason, &e.RuleBreakdown, &e.OrderID,
+			&e.AmountPaise, &e.Currency, &e.IdempotencyKey, &e.Status, &e.PrevHash, &e.EntryHash); err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, nil
+}
+
 // Close closes the database connection.
 func (s *DB) Close() error {
 	return s.db.Close()

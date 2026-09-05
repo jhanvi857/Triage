@@ -59,6 +59,10 @@ func NewServer(cfg Config) (*Server, error) {
 		ManualApprovalThresholdPaise: cfg.ManualApprovalThresholdPaise,
 	}, bMgr, cat)
 	aLogger := audit.NewLogger()
+	aLogger.AttachDB(db)
+	if err := aLogger.LoadFromDB(); err != nil {
+		return nil, fmt.Errorf("failed to load audit chain from database: %w", err)
+	}
 	iStore := idempotency.NewStore(24 * time.Hour)
 	rzpClient := razorpay.NewClient(razorpay.Config{
 		KeyID:         cfg.RazorpayKeyID,
