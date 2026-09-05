@@ -19,7 +19,7 @@ func main() {
 	loadDotEnv()
 
 	port := getEnv("PORT", "8080")
-	thresholdINR := getEnvInt64("MANUAL_APPROVAL_THRESHOLD_INR", 5000)
+	thresholdINR := getEnvInt64("MANUAL_APPROVAL_THRESHOLD_INR", 10000)
 	budgetCapINR := getEnvInt64("DEFAULT_BUDGET_CAP_INR", 10000)
 	dbPath := getEnv("DB_PATH", "ledger.db")
 	rzpKeyID := getEnv("RAZORPAY_KEY_ID", "mock")
