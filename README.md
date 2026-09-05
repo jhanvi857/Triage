@@ -231,10 +231,10 @@ This section consolidates engineering challenges, failure recoveries, and implem
 
 | Subsystem | Implemented Behavior | Primary Engine | Resiliency Fallback | Persistence Target |
 |---|---|---|---|---|
-| **Failure Diagnosis** | 100% deterministic mapping across 8 root failure causes. Zero generative AI or LLMs. | Pure Go (`diagnosis/engine.go`) | None needed (deterministic code rules) | Ephemeral request context |
-| **Candidate Bounds** | Solvency checks and rail pruning (e.g., zero retries on expired cards). | Pure Go (`intervention/selector.go`) | Hard safety bounds | Ephemeral request context |
+| **Failure Diagnosis** | 100% deterministic mapping across 8 root failure causes. Zero generative AI or LLMs. | Pure Go (`diagnosis/diagnosis.go`) | None needed (deterministic code rules) | Ephemeral request context |
+| **Candidate Bounds** | Solvency checks and rail pruning (e.g., zero retries on expired cards). | Pure Go (`intervention/eligibility.go`, `intervention/candidates.go`) | Hard safety bounds | Ephemeral request context |
 | **ML Action Scoring** | Dual-mode ranking of recovery actions by Expected Recovery Value (ERV). | Python FastAPI (`ml-service/serve.py`, 100-tree Random Forest, 34 features, 5.83ms P99) | In-process pure Go Random Forest (`mlclient/embedded_rf.go`, 34 features, <1ms inference) | Trained weights serialized in `model.joblib` and embedded `rf_model.json` |
-| **Policy Enforcement** | Hard deterministic vetoes: max 3 attempts, INR 10,000 human desk escalation, fraud stop. | Pure Go (`gate/gate.go`) | Strict terminal rejection | In-memory budget manager + SQLite database |
+| **Policy Enforcement** | Hard deterministic vetoes: max 3 attempts, INR 10,000 human desk escalation, fraud stop. | Pure Go (`intervention/intervention.go` & `gate/gate.go`) | Strict terminal rejection | In-memory budget manager + SQLite database |
 | **Audit Ledger** | Cryptographic SHA-256 hash-chained log with tamper verification (`VerifyIntegrity`). | SQLite WAL Mode (`storage/storage.go`) + In-Memory Chain (`audit/audit.go`) | In-memory chain authoritative during runtime; synchronous SQLite write per event | SQLite table `audit_logs` (rehydrated via `LoadFromDB` on restart) |
 | **Conversational PTP** | NLP parser extracting Indian date expressions ("parso", "5 tarik", "kal sham") into cron schedules. | Text regex and temporal dictionary (`ptp/parser.go`) | Explicit fallback to human desk | In-memory case state + recovery record |
 | **Evaluation Suite** | Stochastic counterfactual policy simulation across 750 held-out cases. | Go Batch Harness (`batch/harness.go`) | Local benchmark metrics cache (`ml-service/metrics.json`) | In-memory evaluation report |
@@ -299,7 +299,7 @@ stateDiagram-v2
 
 ### Validated Test Suites
 
-#### 1. Go Unit Test Suites (42 Tests, 14 Packages, 0 Failures)
+#### 1. Go Unit Test Suites (44 Tests, 14 Packages, 0 Failures)
 
 ```bash
 cd gateway
